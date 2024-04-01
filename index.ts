@@ -34,14 +34,22 @@ socket.on("connect", () => {
 
 socket.on("preRegister", (data: { signer: string; accountAddress: string }) => {
   console.log("Pre-register event received:", data);
-  preRegistration(data.accountAddress, signers[data.signer]);
+  try {
+    preRegistration(data.accountAddress, signers[data.signer]);
+  } catch (error) {
+    console.error(error);
+  }
 });
 
 socket.on("register", (data: { signer: string; accountAddress: string }) => {
   console.log("Register event received:", data);
   const { accountAddress, signer } = data;
 
-  automateRegistration(accountAddress, signer, signers[signer]).then(() => {
-    registerAllSteps(accountAddress, signers[signer]);
-  });
+  try {
+    automateRegistration(accountAddress, signer, signers[signer]).then(() => {
+      registerAllSteps(accountAddress, signers[signer]);
+    });
+  } catch (error) {
+    console.error(error);
+  }
 });
