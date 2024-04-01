@@ -11,3 +11,7 @@ const socket = io(process.env.API_URL, {
 socket.on("connect", () => {
   console.log("Connected to server");
 });
+
+socket.on("preRegister", (data) => {
+  console.log("Pre-register event received:", data);
+});
