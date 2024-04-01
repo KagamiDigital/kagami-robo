@@ -1,6 +1,10 @@
 require("dotenv").config();
 
-import { preRegistration } from "@intuweb3/exp-node";
+import {
+  preRegistration,
+  automateRegistration,
+  registerAllSteps,
+} from "@intuweb3/exp-node";
 import { ethers } from "ethers";
 
 const provider = new ethers.providers.JsonRpcProvider(process.env.NODE_URL);
@@ -31,4 +35,13 @@ socket.on("connect", () => {
 socket.on("preRegister", (data: { signer: string; accountAddress: string }) => {
   console.log("Pre-register event received:", data);
   preRegistration(data.accountAddress, signers[data.signer]);
+});
+
+socket.on("register", (data: { signer: string; accountAddress: string }) => {
+  console.log("Register event received:", data);
+  const { accountAddress, signer } = data;
+
+  automateRegistration(accountAddress, signer, signers[signer]).then(() => {
+    registerAllSteps(accountAddress, signers[signer]);
+  });
 });
