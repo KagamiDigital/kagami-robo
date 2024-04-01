@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js",
-    "prettify": "npx prettier --write .",
-    "spec": "jest"
+    "build": "npx tsc -p tsconfig.json",
+    "compile": "npx tsc",
+    "tsc": "npx tsc",
+    "start": "npx tsx index.ts",
+    "all": "tsc -p tsconfig.json && npx tsx ./dist/index",
+    "tsn": "npx ts-node index.ts"
   },
   "dependencies": {
     "@intuweb3/exp-node": "^0.99.75",
@@ -15,5 +17,8 @@
     "express": "^4.18.3",
     "jest": "^29.7.0",
     "socket.io-client": "^4.7.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.3"
   }
 }
