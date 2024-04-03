@@ -34,8 +34,12 @@ socket.on("connect", () => {
 
 socket.on("preRegister", (data: { signer: string; accountAddress: string }) => {
   console.log("Pre-register event received:", data);
+  const { accountAddress, signer } = data;
+
   try {
-    preRegistration(data.accountAddress, signers[data.signer]);
+    preRegistration(accountAddress, signers[signer]).then(() => {
+      socket.emit("preRegistrationComplete", { signer, accountAddress });
+    });
   } catch (error) {
     console.error(error);
   }
