@@ -51,7 +51,9 @@ socket.on("register", (data: { signer: string; accountAddress: string }) => {
 
   try {
     automateRegistration(accountAddress, signer, signers[signer]).then(() => {
-      registerAllSteps(accountAddress, signers[signer]);
+      registerAllSteps(accountAddress, signers[signer]).then(() =>{
+        socket.emit("registrationComplete", { signer, accountAddress });
+      });
     });
   } catch (error) {
     console.error(error);
