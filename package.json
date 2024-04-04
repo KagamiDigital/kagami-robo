@@ -3,12 +3,9 @@
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
+    "dev": "npx tsx index.ts",
     "build": "npx tsc -p tsconfig.json",
-    "compile": "npx tsc",
-    "tsc": "npx tsc",
-    "start": "npx tsx index.ts",
-    "all": "tsc -p tsconfig.json && npx tsx ./dist/index",
-    "tsn": "npx ts-node index.ts"
+    "start": "tsc -p tsconfig.json && npx tsx ./dist/index"
   },
   "dependencies": {
     "@intuweb3/exp-node": "^0.99.75",
