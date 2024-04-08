@@ -38,7 +38,7 @@ socket.on("preRegister", (data: { signer: string; accountAddress: string }) => {
 
   try {
     preRegistration(accountAddress, signers[signer]).then(() => {
-      socket.emit("preRegistrationComplete", { signer, accountAddress });
+      socket.emit("preRegistrationComplete", { accountAddress, signer });
     });
   } catch (error) {
     console.error(error);
@@ -48,14 +48,22 @@ socket.on("preRegister", (data: { signer: string; accountAddress: string }) => {
 socket.on("register", (data: { signer: string; accountAddress: string }) => {
   console.log("Register event received:", data);
   const { accountAddress, signer } = data;
+  const responsePayload = { accountAddress, signer };
 
   try {
     automateRegistration(accountAddress, signer, signers[signer]).then(() => {
       registerAllSteps(accountAddress, signers[signer]).then(() =>{
-        socket.emit("registrationComplete", { signer, accountAddress });
+        socket.emit("registrationComplete", {
+          ...responsePayload,
+          success: true
+        });
       });
     });
   } catch (error) {
     console.error(error);
+    socket.emit("registrationComplete", {
+      ...responsePayload,
+      success: false
+    });
   }
 });
