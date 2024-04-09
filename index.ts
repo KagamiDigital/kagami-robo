@@ -35,13 +35,21 @@ socket.on("connect", () => {
 socket.on("preRegister", (data: { signer: string; accountAddress: string }) => {
   console.log("Pre-register event received:", data);
   const { accountAddress, signer } = data;
+  const responsePayload = { accountAddress, signer };
 
   try {
     preRegistration(accountAddress, signers[signer]).then(() => {
-      socket.emit("preRegistrationComplete", { accountAddress, signer });
+      socket.emit("preRegistrationComplete", {
+        ...responsePayload,
+        success: true,
+      });
     });
   } catch (error) {
     console.error(error);
+    socket.emit("preRegistrationComplete", {
+      ...responsePayload,
+      success: false,
+    });
   }
 });
 
@@ -52,10 +60,10 @@ socket.on("register", (data: { signer: string; accountAddress: string }) => {
 
   try {
     automateRegistration(accountAddress, signer, signers[signer]).then(() => {
-      registerAllSteps(accountAddress, signers[signer]).then(() =>{
+      registerAllSteps(accountAddress, signers[signer]).then(() => {
         socket.emit("registrationComplete", {
           ...responsePayload,
-          success: true
+          success: true,
         });
       });
     });
@@ -63,7 +71,7 @@ socket.on("register", (data: { signer: string; accountAddress: string }) => {
     console.error(error);
     socket.emit("registrationComplete", {
       ...responsePayload,
-      success: false
+      success: false,
     });
   }
 });
