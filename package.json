@@ -2,6 +2,7 @@
   "name": "kagami-robo",
   "version": "1.0.0",
   "main": "index.ts",
+  "type": "commonjs",
   "scripts": {
     "dev": "npx tsx index.ts",
     "build": "npx tsc -p tsconfig.json",
