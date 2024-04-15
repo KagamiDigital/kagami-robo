@@ -74,3 +74,9 @@ socket.on("register", (data: { signer: string; accountAddress: string }) => {
     });
   }
 });
+
+const express = require("express");
+const app = express();
+const listener = app.listen(process.env.PORT || 4300, () => {
+  console.log("App is running on port " + listener.address().port);
+});
