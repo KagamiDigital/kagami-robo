@@ -75,6 +75,30 @@ socket.on("register", (data: { signer: string; accountAddress: string }) => {
   }
 });
 
+socket.on(
+  "proposeTransaction",
+  (data: { signer: string; accountAddress: string; txId: string }) => {
+    console.log("Propose transaction event received:", data);
+    const { accountAddress, txId, signer } = data;
+    const responsePayload = { accountAddress, txId, signer };
+
+    try {
+      intu.signTx(accountAddress, txId, signers[signer]).then(() => {
+        socket.emit("transactionSigningComplete", {
+          ...responsePayload,
+          success: true,
+        });
+      });
+    } catch (error) {
+      console.error(error);
+      socket.emit("transactionSigningComplete", {
+        ...responsePayload,
+        success: false,
+      });
+    }
+  },
+);
+
 const express = require("express");
 const app = express();
 const listener = app.listen(process.env.PORT || 4300, () => {
