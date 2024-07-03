@@ -29,19 +29,21 @@ socket.on("connect", () => {
   console.log("Connected to server");
 });
 
-socket.on("preRegister", (data: { signer: string; accountAddress: string }) => {
+socket.on("preRegister", async (data: { signer: string; accountAddress: string }) => {
   console.log("Pre-register event received:", data);
   const { accountAddress, signer } = data;
   const responsePayload = { accountAddress, signer };
 
   try {
-    intu.preRegistration(accountAddress, signers[signer]).then(() => {
-      socket.emit("preRegistrationComplete", {
-        ...responsePayload,
-        success: true,
-      });
+    await intu.preRegistration(accountAddress, signers[signer])
+
+    socket.emit("preRegistrationComplete", {
+      ...responsePayload,
+      success: true,
     });
+
   } catch (error) {
+    console.log("Error PreRegistration")
     console.error(error);
     socket.emit("preRegistrationComplete", {
       ...responsePayload,
@@ -50,23 +52,23 @@ socket.on("preRegister", (data: { signer: string; accountAddress: string }) => {
   }
 });
 
-socket.on("register", (data: { signer: string; accountAddress: string }) => {
+socket.on("register", async (data: { signer: string; accountAddress: string }) => {
   console.log("Register event received:", data);
   const { accountAddress, signer } = data;
   const responsePayload = { accountAddress, signer };
 
   try {
-    intu
-      .automateRegistration(accountAddress, signer, signers[signer])
-      .then(() => {
-        intu.registerAllSteps(accountAddress, signers[signer]).then(() => {
-          socket.emit("registrationComplete", {
-            ...responsePayload,
-            success: true,
-          });
-        });
-      });
+    await intu.automateRegistration(accountAddress, signer, signers[signer])
+
+    await intu.registerAllSteps(accountAddress, signers[signer])
+
+    socket.emit("registrationComplete", {
+      ...responsePayload,
+      success: true,
+    });
+
   } catch (error) {
+    console.log("Error Registration")
     console.error(error);
     socket.emit("registrationComplete", {
       ...responsePayload,
@@ -77,19 +79,21 @@ socket.on("register", (data: { signer: string; accountAddress: string }) => {
 
 socket.on(
   "proposeTransaction",
-  (data: { signer: string; accountAddress: string; txId: string }) => {
+  async (data: { signer: string; accountAddress: string; txId: string }) => {
     console.log("Propose transaction event received:", data);
     const { accountAddress, txId, signer } = data;
     const responsePayload = { accountAddress, txId, signer };
 
     try {
-      intu.signTx(accountAddress, txId, signers[signer]).then(() => {
-        socket.emit("transactionSigningComplete", {
-          ...responsePayload,
-          success: true,
-        });
+      await intu.signTx(accountAddress, txId, signers[signer])
+
+      socket.emit("transactionSigningComplete", {
+        ...responsePayload,
+        success: true,
       });
+
     } catch (error) {
+      console.log("Error proposeTransaction")
       console.error(error);
       socket.emit("transactionSigningComplete", {
         ...responsePayload,
