@@ -3,3 +3,4 @@ dist/
 .env
 index.js
 TODO.md
+/logs/debug.log
