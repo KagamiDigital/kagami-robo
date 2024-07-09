@@ -4,7 +4,7 @@
   "main": "index.ts",
   "type": "commonjs",
   "scripts": {
-    "start": "esbuild index.ts --bundle --external:intu_crypto_bg --outfile=index.js --platform=node && node index.js"
+    "start": "esbuild index.ts --define:DEBUG=true --bundle --external:intu_crypto_bg --outfile=index.js --platform=node && node index.js"
   },
   "dependencies": {
     "@intuweb3/exp-node": "^0.99.75",
