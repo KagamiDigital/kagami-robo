@@ -40,6 +40,7 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
     socket.emit("preRegistrationComplete", {
       ...responsePayload,
       success: true,
+      error: null,
     });
 
   } catch (error) {
@@ -48,6 +49,7 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
     socket.emit("preRegistrationComplete", {
       ...responsePayload,
       success: false,
+      error,
     });
   }
 });
@@ -65,6 +67,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
     socket.emit("registrationComplete", {
       ...responsePayload,
       success: true,
+      error: null,
     });
 
   } catch (error) {
@@ -73,6 +76,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
     socket.emit("registrationComplete", {
       ...responsePayload,
       success: false,
+      error,
     });
   }
 });
@@ -90,6 +94,7 @@ socket.on(
       socket.emit("transactionSigningComplete", {
         ...responsePayload,
         success: true,
+        error: null,
       });
 
     } catch (error) {
@@ -98,6 +103,7 @@ socket.on(
       socket.emit("transactionSigningComplete", {
         ...responsePayload,
         success: false,
+        error,
       });
     }
   },
