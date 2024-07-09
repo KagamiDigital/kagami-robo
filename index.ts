@@ -47,6 +47,7 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
       error: null,
     });
 
+    console.log(`Emitted success TRUE ${socket.id} at :: `, new Date());
   } catch (error) {
     console.log("Error PreRegistration for signer : ", signer)
     console.error(error);
@@ -55,6 +56,7 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
       success: false,
       error,
     });
+    console.log(`Emitted success FALSE ${socket.id} at :: `, new Date());
   }
 });
 
