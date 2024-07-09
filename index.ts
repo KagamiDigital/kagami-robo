@@ -36,6 +36,7 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
   const responsePayload = { accountAddress, signer };
 
   try {
+    console.log("Trying INTU preRegistration for signer : ", signer)
     await intu.preRegistration(accountAddress, signers[signer])
 
     socket.emit("preRegistrationComplete", {
@@ -45,8 +46,8 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
     });
 
   } catch (error) {
-    logger.debug("Error PreRegistration")
-    logger.debug(error);
+    console.log("Error PreRegistration for signer : ", signer)
+    console.error(error);
     socket.emit("preRegistrationComplete", {
       ...responsePayload,
       success: false,
