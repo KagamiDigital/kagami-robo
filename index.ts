@@ -31,14 +31,16 @@ socket.on("connect", () => {
 });
 
 socket.on("preRegister", async (data: { signer: string; accountAddress: string }) => {
+  console.log("preRegister event listener created :: ", socket.id)
   logger.debug("Pre-register event received:", data);
   const { accountAddress, signer } = data;
   const responsePayload = { accountAddress, signer };
 
   try {
     console.log("Trying INTU preRegistration for signer : ", signer)
+    console.log("Start intu.preRegistration", socket.id);
     await intu.preRegistration(accountAddress, signers[signer])
-
+    console.log("Done intu.preRegistration", socket.id);
     socket.emit("preRegistrationComplete", {
       ...responsePayload,
       success: true,
