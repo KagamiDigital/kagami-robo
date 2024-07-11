@@ -1,20 +1,19 @@
 import dotenv from "dotenv";
-import logger from "./logger";
 dotenv.config();
 
 import { ethers } from "ethers";
-const provider = new ethers.providers.JsonRpcProvider(process.env.NODE_URL);
+const provider = new ethers.providers.JsonRpcProvider({url:process.env.NODE_URL!,skipFetchSetup:true});
 const signers: { [index: string]: any } = {};
 
 const intu = require("@intuweb3/exp-node");
 
 (async () => {
-  process.env.KEYS.split(",").forEach(async (privateKey, i) => {
+  process.env.KEYS!.split(",").forEach(async (privateKey, i) => {
     const wallet = new ethers.Wallet(privateKey);
     const signer = wallet.connect(provider);
     const publicAddress = await signer.getAddress();
     signers[publicAddress] = signer;
-    logger.debug(`Signer ${i + 1}`, publicAddress);
+    console.log(`Signer ${i + 1}`, publicAddress);
   });
 })();
 
@@ -27,11 +26,14 @@ const socket = io(process.env.API_URL + "/robo", {
 });
 
 socket.on("connect", () => {
-  logger.debug("Connected to server");
+  console.log("Connected to server");
 });
 
+socket.on("connect_error", (err:any) => console.log(err)); 
+socket.on("error", (err:any) => console.log(err)); 
+
 socket.on("preRegister", async (data: { signer: string; accountAddress: string }) => {
-  logger.debug("Pre-register event received:", data);
+  console.log("Pre-register event received:", data);
   const { accountAddress, signer } = data;
   const responsePayload = { accountAddress, signer };
 
@@ -43,9 +45,11 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
       success: true,
     });
 
+    console.log('emitted preregitration event')
+
   } catch (error) {
-    logger.debug("Error PreRegistration")
-    logger.debug(error);
+    console.log("Error PreRegistration")
+    console.log(error);
     socket.emit("preRegistrationComplete", {
       ...responsePayload,
       success: false,
@@ -54,7 +58,7 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
 });
 
 socket.on("register", async (data: { signer: string; accountAddress: string }) => {
-  logger.debug("Register event received:", data);
+  console.log("Register event received:", data);
   const { accountAddress, signer } = data;
   const responsePayload = { accountAddress, signer };
 
@@ -69,8 +73,8 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
     });
 
   } catch (error) {
-    logger.debug("Error Registration")
-    logger.debug(error);
+    console.log("Error Registration")
+    console.log(error);
     socket.emit("registrationComplete", {
       ...responsePayload,
       success: false,
@@ -81,7 +85,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
 socket.on(
   "proposeTransaction",
   async (data: { signer: string; accountAddress: string; txId: string }) => {
-    logger.debug("Propose transaction event received:", data);
+    console.log("Propose transaction event received:", data);
     const { accountAddress, txId, signer } = data;
     const responsePayload = { accountAddress, txId, signer };
 
@@ -94,8 +98,8 @@ socket.on(
       });
 
     } catch (error) {
-      logger.debug("Error proposeTransaction")
-      logger.debug(error);
+      console.log("Error proposeTransaction")
+      console.log(error);
       socket.emit("transactionSigningComplete", {
         ...responsePayload,
         success: false,
@@ -107,5 +111,5 @@ socket.on(
 const express = require("express");
 const app = express();
 const listener = app.listen(process.env.PORT || 4300, () => {
-  logger.debug("App is running on port " + listener.address().port);
+  console.log("App is running on port " + listener.address().port);
 });
