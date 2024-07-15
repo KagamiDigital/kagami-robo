@@ -4,9 +4,13 @@
   "main": "index.ts",
   "type": "commonjs",
   "scripts": {
+<<<<<<< HEAD
     "start": "node dist/bundle.js",
     "buildwebpack": "rm -rf dist && webpack",
     "nodev": "node --version"
+=======
+    "start": "esbuild index.ts --define:DEBUG=true --bundle --external:intu_crypto_bg --outfile=index.js --platform=node && node index.js"
+>>>>>>> 70e2c78d1dda48223fdfd6024b736953864a2663
   },
   "dependencies": {
     "@intuweb3/exp-node": "^0.99.83",

@@ -47,15 +47,19 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
     socket.emit("preRegistrationComplete", {
       ...responsePayload,
       success: true,
+      error: null,
     });
 
+    console.log(`Emitted success TRUE ${socket.id} at :: `, new Date());
   } catch (error) {
-    console.log("Error PreRegistration")
-    console.log(error);
+    console.log("Error PreRegistration for signer : ", signer)
+    console.error(error);
     socket.emit("preRegistrationComplete", {
       ...responsePayload,
       success: false,
+      error,
     });
+    console.log(`Emitted success FALSE ${socket.id} at :: `, new Date());
   }
 });
 
@@ -72,6 +76,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
     socket.emit("registrationComplete", {
       ...responsePayload,
       success: true,
+      error: null,
     });
 
   } catch (error) {
@@ -80,6 +85,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
     socket.emit("registrationComplete", {
       ...responsePayload,
       success: false,
+      error,
     });
   }
 });
@@ -97,6 +103,7 @@ socket.on(
       socket.emit("transactionSigningComplete", {
         ...responsePayload,
         success: true,
+        error: null,
       });
 
     } catch (error) {
@@ -105,6 +112,7 @@ socket.on(
       socket.emit("transactionSigningComplete", {
         ...responsePayload,
         success: false,
+        error,
       });
     }
   },
