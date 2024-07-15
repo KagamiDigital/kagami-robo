@@ -17,6 +17,7 @@ module.exports = {
       },
     ],
   },
+  optimization: {minimize: false},
   resolve: {
     extensions: ['.tsx', '.ts', '.js', '.wasm'],
     fallback: {

@@ -1,11 +1,17 @@
-import dotenv from "dotenv";
+import * as dotenv from "dotenv"
+import {io} from 'socket.io-client'
 dotenv.config();
 
 import { ethers } from "ethers";
-const provider = new ethers.providers.JsonRpcProvider({url:process.env.NODE_URL!,skipFetchSetup:true});
+const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.NODE_URL || "",skipFetchSetup:true});
 const signers: { [index: string]: any } = {};
 
-const intu = require("@intuweb3/exp-node");
+import {
+  preRegistration,
+  automateRegistration,
+  registerAllSteps,
+  signTx,
+} from "@intuweb3/exp-node";
 
 (async () => {
   process.env.KEYS!.split(",").forEach(async (privateKey, i) => {
@@ -17,8 +23,6 @@ const intu = require("@intuweb3/exp-node");
   });
 })();
 
-const io = require("socket.io-client");
-
 const socket = io(process.env.API_URL + "/robo", {
   query: {
     apiKey: process.env.API_KEY,
@@ -29,23 +33,21 @@ socket.on("connect", () => {
   console.log("Connected to server");
 });
 
-socket.on("connect_error", (err:any) => console.log(err)); 
 socket.on("error", (err:any) => console.log(err)); 
 
 socket.on("preRegister", async (data: { signer: string; accountAddress: string }) => {
   console.log("Pre-register event received:", data);
+  console.log(process.env.NODE_URL);
   const { accountAddress, signer } = data;
   const responsePayload = { accountAddress, signer };
 
   try {
-    await intu.preRegistration(accountAddress, signers[signer])
+    await preRegistration(accountAddress, signers[signer])
 
     socket.emit("preRegistrationComplete", {
       ...responsePayload,
       success: true,
     });
-
-    console.log('emitted preregitration event')
 
   } catch (error) {
     console.log("Error PreRegistration")
@@ -63,9 +65,9 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
   const responsePayload = { accountAddress, signer };
 
   try {
-    await intu.automateRegistration(accountAddress, signer, signers[signer])
+    await automateRegistration(accountAddress, signer, signers[signer])
 
-    await intu.registerAllSteps(accountAddress, signers[signer])
+    await registerAllSteps(accountAddress, signers[signer])
 
     socket.emit("registrationComplete", {
       ...responsePayload,
@@ -90,7 +92,7 @@ socket.on(
     const responsePayload = { accountAddress, txId, signer };
 
     try {
-      await intu.signTx(accountAddress, txId, signers[signer])
+      await signTx(accountAddress, Number(txId), signers[signer])
 
       socket.emit("transactionSigningComplete", {
         ...responsePayload,
