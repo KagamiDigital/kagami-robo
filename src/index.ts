@@ -1,24 +1,27 @@
-import dotenv from "dotenv";
-import logger from "./logger";
+import * as dotenv from "dotenv"
+import {io} from 'socket.io-client'
 dotenv.config();
 
 import { ethers } from "ethers";
-const provider = new ethers.providers.JsonRpcProvider(process.env.NODE_URL);
+const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.NODE_URL || "",skipFetchSetup:true});
 const signers: { [index: string]: any } = {};
 
-const intu = require("@intuweb3/exp-node");
+import {
+  preRegistration,
+  automateRegistration,
+  registerAllSteps,
+  signTx,
+} from "@intuweb3/exp-node";
 
 (async () => {
-  process.env.KEYS.split(",").forEach(async (privateKey, i) => {
+  process.env.KEYS!.split(",").forEach(async (privateKey, i) => {
     const wallet = new ethers.Wallet(privateKey);
     const signer = wallet.connect(provider);
     const publicAddress = await signer.getAddress();
     signers[publicAddress] = signer;
-    logger.debug(`Signer ${i + 1}`, publicAddress);
+    console.log(`Signer ${i + 1}`, publicAddress);
   });
 })();
-
-const io = require("socket.io-client");
 
 const socket = io(process.env.API_URL + "/robo", {
   query: {
@@ -27,20 +30,20 @@ const socket = io(process.env.API_URL + "/robo", {
 });
 
 socket.on("connect", () => {
-  logger.debug("Connected to server");
+  console.log("Connected to server");
 });
 
+socket.on("error", (err:any) => console.log(err)); 
+
 socket.on("preRegister", async (data: { signer: string; accountAddress: string }) => {
-  console.log("preRegister event listener created :: ", socket.id)
-  logger.debug("Pre-register event received:", data);
+  console.log("Pre-register event received:", data);
+  console.log(process.env.NODE_URL);
   const { accountAddress, signer } = data;
   const responsePayload = { accountAddress, signer };
 
   try {
-    console.log("Trying INTU preRegistration for signer : ", signer)
-    console.log("Start intu.preRegistration", socket.id);
-    await intu.preRegistration(accountAddress, signers[signer])
-    console.log("Done intu.preRegistration", socket.id);
+    await preRegistration(accountAddress, signers[signer])
+
     socket.emit("preRegistrationComplete", {
       ...responsePayload,
       success: true,
@@ -61,14 +64,14 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
 });
 
 socket.on("register", async (data: { signer: string; accountAddress: string }) => {
-  logger.debug("Register event received:", data);
+  console.log("Register event received:", data);
   const { accountAddress, signer } = data;
   const responsePayload = { accountAddress, signer };
 
   try {
-    await intu.automateRegistration(accountAddress, signer, signers[signer])
+    await automateRegistration(accountAddress, signer, signers[signer])
 
-    await intu.registerAllSteps(accountAddress, signers[signer])
+    await registerAllSteps(accountAddress, signers[signer])
 
     socket.emit("registrationComplete", {
       ...responsePayload,
@@ -77,8 +80,8 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
     });
 
   } catch (error) {
-    logger.debug("Error Registration")
-    logger.debug(error);
+    console.log("Error Registration")
+    console.log(error);
     socket.emit("registrationComplete", {
       ...responsePayload,
       success: false,
@@ -90,12 +93,12 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
 socket.on(
   "proposeTransaction",
   async (data: { signer: string; accountAddress: string; txId: string }) => {
-    logger.debug("Propose transaction event received:", data);
+    console.log("Propose transaction event received:", data);
     const { accountAddress, txId, signer } = data;
     const responsePayload = { accountAddress, txId, signer };
 
     try {
-      await intu.signTx(accountAddress, txId, signers[signer])
+      await signTx(accountAddress, Number(txId), signers[signer])
 
       socket.emit("transactionSigningComplete", {
         ...responsePayload,
@@ -104,8 +107,8 @@ socket.on(
       });
 
     } catch (error) {
-      logger.debug("Error proposeTransaction")
-      logger.debug(error);
+      console.log("Error proposeTransaction")
+      console.log(error);
       socket.emit("transactionSigningComplete", {
         ...responsePayload,
         success: false,
@@ -118,5 +121,5 @@ socket.on(
 const express = require("express");
 const app = express();
 const listener = app.listen(process.env.PORT || 4300, () => {
-  logger.debug("App is running on port " + listener.address().port);
+  console.log("App is running on port " + listener.address().port);
 });
