@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2022", // target JS to compile TS code to
     "forceConsistentCasingInFileNames": true,
-    "strict": true,
+    "strict": false,
     "skipLibCheck": true,
     "outDir": "./dist/lib",
     "typeRoots": ["./node_modules/@types"],
