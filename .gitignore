@@ -3,6 +3,6 @@ dist/
 .env
 index.js
 TODO.md
-/logs/debug.log
+/logs/*.log
 
 *.sublime-*
