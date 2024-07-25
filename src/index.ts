@@ -23,17 +23,21 @@ import {
   });
 })();
 
+console.log("Attempting socket on ", process.env.API_URL)
+
 const socket = io(process.env.API_URL + "/robo", {
   query: {
     apiKey: process.env.API_KEY,
   },
+  transports: ["websocket"]
 });
 
 socket.on("connect", () => {
   console.log("Connected to server");
 });
 
-socket.on("error", (err:any) => console.log(err)); 
+socket.on("error", (err:any) => console.log("ERROR", err)); 
+socket.on("connect_error", (err:any) => console.log("CONNECT ERROR", err)); 
 
 socket.on("preRegister", async (data: { signer: string; accountAddress: string }) => {
   console.log("Pre-register event received:", data);
