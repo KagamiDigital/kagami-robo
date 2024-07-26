@@ -1,3 +1,4 @@
+import * as logger from "./logger"
 import * as dotenv from "dotenv"
 import {io} from 'socket.io-client'
 dotenv.config();
@@ -20,6 +21,8 @@ import {
     const publicAddress = await signer.getAddress();
     signers[publicAddress] = signer;
     console.log(`Signer ${i + 1}`, publicAddress);
+
+    logger.info(`Signer ${i + 1}`, publicAddress)
   });
 })();
 
@@ -33,20 +36,31 @@ const socket = io(process.env.API_URL + "/robo", {
 });
 
 socket.on("connect", () => {
-  console.log("Connected to server");
+  console.log(`Connected to server URL : ${process.env.API_URL}`)
 });
 
-socket.on("error", (err:any) => console.log("ERROR", err)); 
-socket.on("connect_error", (err:any) => console.log("CONNECT ERROR", err)); 
+socket.on("error", (err:any) => {
+  console.log(err)
+  logger.error("Log:Error: Error connecting to API Socket Stream", err)
+});
+
+socket.on("connect_error", (err:any) => {
+  console.log(err)
+  logger.error("Log:Error: Error connect_error connecting to API Socket Stream", err)
+});
 
 socket.on("preRegister", async (data: { signer: string; accountAddress: string }) => {
-  console.log("Pre-register event received:", data);
-  console.log(process.env.NODE_URL);
+
   const { accountAddress, signer } = data;
   const responsePayload = { accountAddress, signer };
 
+  _sendLogToClient(`SaltRobos: pre-registration:${signer} => Event Received From API`, {}, responsePayload)
+
   try {
-    await preRegistration(accountAddress, signers[signer])
+
+    _sendLogToClient(`SaltRobos: pre-registration:start:${signer} => expect success or failure`, {}, responsePayload)
+    const res = await preRegistration(accountAddress, signers[signer])
+    _sendLogToClient(`SaltRobos: pre-registration:success:${signer} => response`, {res}, responsePayload)
 
     socket.emit("preRegistrationComplete", {
       ...responsePayload,
@@ -54,38 +68,58 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
       error: null,
     });
 
-    console.log(`Emitted success TRUE ${socket.id} at :: `, new Date());
   } catch (error) {
-    console.log("Error PreRegistration for signer : ", signer)
-    console.error(error);
+
+    _sendLogToClient(`SaltRobos:Error: pre-registration:failure:${signer} => error`, {error}, responsePayload)
+
     socket.emit("preRegistrationComplete", {
       ...responsePayload,
       success: false,
       error,
     });
-    console.log(`Emitted success FALSE ${socket.id} at :: `, new Date());
+
   }
 });
 
 socket.on("register", async (data: { signer: string; accountAddress: string }) => {
-  console.log("Register event received:", data);
+
   const { accountAddress, signer } = data;
   const responsePayload = { accountAddress, signer };
 
+  _sendLogToClient(`SaltRobos: register:${signer} => Event Received From API`, {}, responsePayload)
+
   try {
-    await automateRegistration(accountAddress, signer, signers[signer])
-
-    await registerAllSteps(accountAddress, signers[signer])
-
-    socket.emit("registrationComplete", {
-      ...responsePayload,
-      success: true,
-      error: null,
-    });
+    _sendLogToClient(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
+    const res = await automateRegistration(accountAddress, signer, signers[signer])
+    _sendLogToClient(`SaltRobos: register:automateRegistration:success:${signer} => response`, {res}, responsePayload)
 
   } catch (error) {
-    console.log("Error Registration")
-    console.log(error);
+    _sendLogToClient(`SaltRobos:Error: register:automateRegistration:failure:${signer} => error`, {error}, responsePayload)
+
+    emitError(error)
+    return
+  }
+
+
+  try {
+    _sendLogToClient(`SaltRobos: register:registerAllSteps:start:${signer} => expect success or failure`, {}, responsePayload)
+    const res = await registerAllSteps(accountAddress, signers[signer])
+    _sendLogToClient(`SaltRobos: register:registerAllSteps:success:${signer} => response`, {res}, responsePayload)
+  } catch(error) {
+    _sendLogToClient(`SaltRobos:Error: register:registerAllSteps:failure:${signer} => error`, {error}, responsePayload)
+
+    emitError(error)
+    return
+  }
+
+  socket.emit("registrationComplete", {
+    ...responsePayload,
+    success: true,
+    error: null,
+  });
+
+  function emitError(error)
+  {
     socket.emit("registrationComplete", {
       ...responsePayload,
       success: false,
@@ -97,12 +131,17 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
 socket.on(
   "proposeTransaction",
   async (data: { signer: string; accountAddress: string; txId: string }) => {
-    console.log("Propose transaction event received:", data);
+
     const { accountAddress, txId, signer } = data;
     const responsePayload = { accountAddress, txId, signer };
 
+    _sendLogToClient(`SaltRobos: proposeTransaction:signTx:${signer} => Event Received`, {}, responsePayload)
+
     try {
-      await signTx(accountAddress, Number(txId), signers[signer])
+      _sendLogToClient(`SaltRobos: proposeTransaction:signTx:start:${signer} => expect success or failure`, {}, responsePayload)
+
+      const res = await signTx(accountAddress, Number(txId), signers[signer])
+      _sendLogToClient(`SaltRobos: proposeTransaction:signTx:success:${signer} => response`, {res}, responsePayload)
 
       socket.emit("transactionSigningComplete", {
         ...responsePayload,
@@ -111,8 +150,9 @@ socket.on(
       });
 
     } catch (error) {
-      console.log("Error proposeTransaction")
-      console.log(error);
+
+      _sendLogToClient(`SaltRobos:Error: proposeTransaction:signTx:failure:${signer} => error`, {error}, responsePayload)
+
       socket.emit("transactionSigningComplete", {
         ...responsePayload,
         success: false,
@@ -121,6 +161,19 @@ socket.on(
     }
   },
 );
+
+function _sendLogToClient(message, data, responsePayload) {
+  let m = message
+  if (data) {
+    m = `${message} :: ${JSON.stringify(data)}`
+  }
+
+  socket.emit("update", {
+    ...responsePayload,
+    message: m,
+  })
+}
+
 
 const express = require("express");
 const app = express();
