@@ -163,6 +163,11 @@ socket.on(
 );
 
 function _sendLogToClient(message, data, responsePayload) {
+
+  console.error("message:", message)
+  console.error("data", message)
+  console.error("responsePayload", responsePayload)
+
   let m = message
   if (data) {
     m = `${message} :: ${JSON.stringify(data)}`
