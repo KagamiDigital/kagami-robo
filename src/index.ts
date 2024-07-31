@@ -86,7 +86,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
   const { accountAddress, signer } = data;
   const responsePayload = { accountAddress, signer };
 
-  _sendLogToClient(`SaltRobos: register:${signer} => Event Received From API`, {}, responsePayload)
+  _sendLogToClient(`SaltRobos: register:event:received for signer: ${signer}`, {}, responsePayload)
 
   try {
     _sendLogToClient(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
