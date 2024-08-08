@@ -72,6 +72,8 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
 
     _sendLogToClient(`SaltRobos:Error: pre-registration:failure:${signer} => error`, {error}, responsePayload)
 
+    logger.error(`Log:Error: Error pre-registration:failure:${signer}`, error)
+
     socket.emit("preRegistrationComplete", {
       ...responsePayload,
       success: false,
@@ -96,6 +98,8 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
   } catch (error) {
     _sendLogToClient(`SaltRobos:Error: register:automateRegistration:failure:${signer} => error`, {error}, responsePayload)
 
+    logger.error(`Log:Error: Error register:automateRegistration:failure:${signer}`, error)
+
     emitError(error)
     return
   }
@@ -107,6 +111,8 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
     _sendLogToClient(`SaltRobos: register:registerAllSteps:success:${signer} => response`, {res}, responsePayload)
   } catch(error) {
     _sendLogToClient(`SaltRobos:Error: register:registerAllSteps:failure:${signer} => error`, {error}, responsePayload)
+
+    logger.error(`Log:Error: Error register:registerAllSteps:failure:${signer}`, error)
 
     emitError(error)
     return
@@ -152,6 +158,8 @@ socket.on(
     } catch (error) {
 
       _sendLogToClient(`SaltRobos:Error: proposeTransaction:signTx:failure:${signer} => error`, {error}, responsePayload)
+
+      logger.error(`Log:Error: Error proposeTransaction:signTx:failure:${signer}`, error)
 
       socket.emit("transactionSigningComplete", {
         ...responsePayload,
