@@ -4,14 +4,15 @@ import {io} from 'socket.io-client'
 dotenv.config();
 
 import { ethers } from "ethers";
-const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.NODE_URL || "",skipFetchSetup:true});
-const signers: { [index: string]: any } = {};
+const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.SEPOLIA_NODE_URL || "",skipFetchSetup:true});
+const signers: { [index: string]: ethers.Wallet } = {};
 
 import {
   preRegistration,
   automateRegistration,
   registerAllSteps,
   signTx,
+  combineSignedTx,
 } from "@intuweb3/exp-node";
 
 (async () => {
@@ -169,6 +170,52 @@ socket.on(
     }
   },
 );
+
+socket.on(
+  "broadcastTransaction",
+  async (data: { signer: string; accountAddress: string; txId: string }) => {
+
+    const { accountAddress, txId, signer } = data;
+    const responsePayload = { accountAddress, txId, signer, txReceipt: null };
+
+    _sendLogToClient(`SaltRobos: broadcastTransaction:signTx:${signer} => Event Received`, {}, responsePayload); 
+
+    try {
+      _sendLogToClient(`SaltRobos: broadcastTransaction:combineTx:start:${signer} => expect success or failure`, {}, responsePayload)
+
+      const res = await combineSignedTx(accountAddress, Number(txId), signers[signer])
+      _sendLogToClient(`SaltRobos: broadcastTransaction:combineTx:success:${signer} => response`, {res}, responsePayload)
+
+      _sendLogToClient(`SaltRobos: broadcastTransaction:sendTx:start:${signer} => expect success or failure`, {}, responsePayload)
+
+      const txResponse = await provider.sendTransaction(res.combinedTxHash.finalSignedTransaction); 
+
+      const txRreceipt= await txResponse.wait(); 
+
+      responsePayload.txReceipt = txRreceipt
+
+      _sendLogToClient(`SaltRobos: broadcastTransaction:sendTx:success:${signer} => response`, {}, txRreceipt)
+
+      socket.emit("transactionBroadcastingComplete", {
+        ...responsePayload,
+        success: true,
+        error: null,
+      });
+
+    } catch (error) {
+
+      _sendLogToClient(`SaltRobos:Error: broadcastTransaction:failure:${signer} => error`, {error}, responsePayload)
+
+      logger.error(`Log:Error: Error broadcastTransaction:failure:${signer}`, error)
+
+      socket.emit("transactionBroadcastingComplete", {
+        ...responsePayload,
+        success: false,
+        error,
+      });
+    } 
+  }
+)
 
 function _sendLogToClient(message, data, responsePayload) {
 
