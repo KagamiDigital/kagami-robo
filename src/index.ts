@@ -14,6 +14,7 @@ import {
   signTx,
   combineSignedTx,
 } from "@intuweb3/exp-node";
+import { getRPCNodeFromNetworkId } from "./utils";
 
 (async () => {
   process.env.KEYS!.split(",").forEach(async (privateKey, i) => {
@@ -173,12 +174,30 @@ socket.on(
 
 socket.on(
   "broadcastTransaction",
-  async (data: { signer: string; accountAddress: string; txId: string }) => {
+  async (data: { signer: string; accountAddress: string; txId: string, networkId:string }) => {
 
-    const { accountAddress, txId, signer } = data;
+    const { accountAddress, txId, networkId, signer } = data;
     const responsePayload = { accountAddress, txId, signer, txReceipt: null };
 
     _sendLogToClient(`SaltRobos: broadcastTransaction:signTx:${signer} => Event Received`, {}, responsePayload); 
+
+    const RPC_NODE_URL = getRPCNodeFromNetworkId(networkId);  
+    
+    if(!RPC_NODE_URL) {
+      
+      const _error = `network id is not supported: ${networkId}`; 
+      _sendLogToClient(`SaltRobos:Error: broadcastTransaction:failure:${signer} => error`, {_error}, responsePayload)
+
+      logger.error(`Log:Error: Error broadcastTransaction:failure:${signer}`, _error)
+
+      socket.emit("transactionBroadcastingComplete", {
+        ...responsePayload,
+        success: false,
+        _error,
+      });
+
+      return; 
+    }
 
     try {
       _sendLogToClient(`SaltRobos: broadcastTransaction:combineTx:start:${signer} => expect success or failure`, {}, responsePayload)
@@ -188,13 +207,15 @@ socket.on(
 
       _sendLogToClient(`SaltRobos: broadcastTransaction:sendTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
-      const txResponse = await provider.sendTransaction(res.combinedTxHash.finalSignedTransaction); 
+      const _provider = new ethers.providers.StaticJsonRpcProvider({url: RPC_NODE_URL || "",skipFetchSetup:true});
 
-      const txRreceipt= await txResponse.wait(); 
+      const txResponse = await _provider.sendTransaction(res.combinedTxHash.finalSignedTransaction); 
 
-      responsePayload.txReceipt = txRreceipt
+      const txReceipt= await txResponse.wait(); 
 
-      _sendLogToClient(`SaltRobos: broadcastTransaction:sendTx:success:${signer} => response`, {}, txRreceipt)
+      responsePayload.txReceipt = txReceipt; 
+
+      _sendLogToClient(`SaltRobos: broadcastTransaction:sendTx:success:${signer} => response`, {}, { responsePayload,txReceipt })
 
       socket.emit("transactionBroadcastingComplete", {
         ...responsePayload,
