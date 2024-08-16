@@ -199,17 +199,39 @@ socket.on(
       return; 
     }
 
+    let combineResponse;  
+
     try {
       _sendLogToClient(`SaltRobos: broadcastTransaction:combineTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
-      const res = await combineSignedTx(accountAddress, Number(txId), signers[signer])
-      _sendLogToClient(`SaltRobos: broadcastTransaction:combineTx:success:${signer} => response`, {res}, responsePayload)
+      combineResponse = await combineSignedTx(accountAddress, Number(txId), signers[signer])
+      _sendLogToClient(`SaltRobos: broadcastTransaction:combineTx:success:${signer} => response`, {combineResponse}, responsePayload)
+
+      socket.emit("transactionCombiningComplete", {
+        ...responsePayload,
+        success: true,
+        error: null,
+      });
+    } catch (error) {
+
+      _sendLogToClient(`SaltRobos:Error: broadcastTransaction:combineTx:failure:${signer} => error`, {error}, responsePayload)
+
+      logger.error(`Log:Error: Error broadcastTransaction:combineTx:failure:${signer}`, error)
+
+      socket.emit("transactionBroadcastingComplete", {
+        ...responsePayload,
+        success: false,
+        error,
+      });
+      return; 
+    }
+    try {
 
       _sendLogToClient(`SaltRobos: broadcastTransaction:sendTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
       const _provider = new ethers.providers.StaticJsonRpcProvider({url: RPC_NODE_URL || "",skipFetchSetup:true});
 
-      const txResponse = await _provider.sendTransaction(res.combinedTxHash.finalSignedTransaction); 
+      const txResponse = await _provider.sendTransaction(combineResponse.combinedTxHash.finalSignedTransaction); 
 
       const txReceipt= await txResponse.wait(); 
 
@@ -225,9 +247,9 @@ socket.on(
 
     } catch (error) {
 
-      _sendLogToClient(`SaltRobos:Error: broadcastTransaction:failure:${signer} => error`, {error}, responsePayload)
+      _sendLogToClient(`SaltRobos:Error: broadcastTransaction:sendTx:failure:${signer} => error`, {error}, responsePayload)
 
-      logger.error(`Log:Error: Error broadcastTransaction:failure:${signer}`, error)
+      logger.error(`Log:Error: Error broadcastTransaction:sendTx:failure:${signer}`, error)
 
       socket.emit("transactionBroadcastingComplete", {
         ...responsePayload,
