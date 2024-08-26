@@ -269,7 +269,7 @@ socket.on(
 function _sendLogToClient(message, data, responsePayload) {
 
   console.error("message:", message)
-  console.error("data", message)
+  console.error("data", data)
   console.error("responsePayload", responsePayload)
 
   let m = message
