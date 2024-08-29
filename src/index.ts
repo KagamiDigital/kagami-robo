@@ -13,6 +13,8 @@ import {
   registerAllSteps,
   signTx,
   combineSignedTx,
+  getUserRegistrationAllInfos,
+  getUserPreRegisterInfos,
 } from "@intuweb3/exp-node";
 import { getRPCNodeFromNetworkId } from "./utils";
 
@@ -58,6 +60,40 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
 
   _sendLogToClient(`SaltRobos: pre-registration:${signer} => Event Received From API`, {}, responsePayload)
 
+  
+  try {
+
+    _sendLogToClient(`SaltRobos: pre-registration:getPreregistrationStatus:start:${signer} => expect success or failure`, {}, responsePayload)
+    
+    const preRegisterInfo = await getUserPreRegisterInfos(accountAddress,signer,provider); 
+
+    if(preRegisterInfo.registered) { // user is already pre registered, redundant request
+      
+      _sendLogToClient(`SaltRobos: pre-registration:getPreregistrationStatus:success:${signer}`, preRegisterInfo.registered, responsePayload)
+    
+      socket.emit("preRegistrationComplete", {
+        ...responsePayload,
+        success: true,
+        error: null,
+      });
+
+      return; 
+    }
+  } catch(error) {
+
+    _sendLogToClient(`SaltRobos:Error: pre-registration:getPreRegistrationSatus:failure:${signer} => error`, {error}, responsePayload)
+
+    logger.error(`Log:Error: Error pre-registration:getPreregistrationStatus:failure:${signer}`, error)
+
+    socket.emit("preRegistrationComplete", {
+      ...responsePayload,
+      success: false,
+      error,
+    });
+
+    return; 
+  }
+  
   try {
 
     _sendLogToClient(`SaltRobos: pre-registration:start:${signer} => expect success or failure`, {}, responsePayload)
@@ -91,21 +127,64 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
 
   const { accountAddress, signer } = data;
   const responsePayload = { accountAddress, signer };
+  
+  _sendLogToClient(`SaltRobos: register:event:received for signer: ${signer}`, {}, responsePayload);
 
-  _sendLogToClient(`SaltRobos: register:event:received for signer: ${signer}`, {}, responsePayload)
+  try {
+
+    _sendLogToClient(`SaltRobos: register:event:getRegistrationStatus:start:${signer} => expect success or failure`, {}, responsePayload);
+   
+    const res = await getUserRegistrationAllInfos(
+      accountAddress,
+      signer,
+      provider,
+    );
+
+    if(res.registered) { // robo has already registerd, redundant request
+      
+      _sendLogToClient(`SaltRobos: register:event:getRegistrationStatus:success:${signer}`, res.registered, responsePayload);
+   
+      socket.emit("registrationComplete", {
+        ...responsePayload,
+        success: true,
+        error: null,
+      });
+      return;
+    }
+  } catch(error) {
+
+    _sendLogToClient(`SaltRobos: register:event:getRegistrationStatus:failure:${signer}`, {error}, responsePayload);
+   
+    logger.error(`Log:Error: Error register:event:getRegistrationStatus:failure:${signer}`, error)
+
+    socket.emit("registrationComplete", {
+      ...responsePayload,
+      success: false,
+      error: null,
+    });
+    return;
+  }
 
   try {
     _sendLogToClient(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
+    
     const res = await automateRegistration(accountAddress, signer, signers[signer])
+    
     _sendLogToClient(`SaltRobos: register:automateRegistration:success:${signer} => response`, {res}, responsePayload)
 
   } catch (error) {
+    
     _sendLogToClient(`SaltRobos:Error: register:automateRegistration:failure:${signer} => error`, {error}, responsePayload)
 
     logger.error(`Log:Error: Error register:automateRegistration:failure:${signer}`, error)
 
-    emitError(error)
-    return
+    socket.emit("registrationComplete", {
+      ...responsePayload,
+      success: false,
+      error: null,
+    });
+
+    return; 
   }
 
 
@@ -120,7 +199,12 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
 
     logger.error(`Log:Error: Error register:registerAllSteps:failure:${signer}`, error)
 
-    emitError(error)
+    socket.emit("registrationComplete", {
+      ...responsePayload,
+      success: false,
+      error: null,
+    });
+
     return
   }
 
@@ -129,15 +213,6 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
     success: true,
     error: null,
   });
-
-  function emitError(error)
-  {
-    socket.emit("registrationComplete", {
-      ...responsePayload,
-      success: false,
-      error,
-    });
-  }
 });
 
 socket.on(
@@ -282,7 +357,6 @@ function _sendLogToClient(message, data, responsePayload) {
     message: m,
   })
 }
-
 
 const express = require("express");
 const app = express();
