@@ -227,7 +227,7 @@ socket.on(
     try {
       _sendLogToClient(`SaltRobos: proposeTransaction:signTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
-      const tx = await signTx(accountAddress, Number(txId), signers[signer])
+      const tx = await signTx(accountAddress, Number(txId), signers[signer],undefined,250000)
       const res = await tx.wait()
 
       _sendLogToClient(`SaltRobos: proposeTransaction:signTx:success:${signer} => response`, {res}, responsePayload)
