@@ -97,7 +97,7 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
   try {
 
     _sendLogToClient(`SaltRobos: pre-registration:start:${signer} => expect success or failure`, {}, responsePayload)
-    const tx = await preRegistration(accountAddress, signers[signer])
+    const tx = await preRegistration(accountAddress, signers[signer]) as ethers.ContractTransaction
     const res = await tx.wait();
 
     _sendLogToClient(`SaltRobos: pre-registration:success:${signer} => response`, {res}, responsePayload)
@@ -190,7 +190,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
 
   try {
     _sendLogToClient(`SaltRobos: register:registerAllSteps:start:${signer} => expect success or failure`, {}, responsePayload)
-    const tx = await registerAllSteps(accountAddress, signers[signer])
+    const tx = await registerAllSteps(accountAddress, signers[signer]) as ethers.ContractTransaction
     const res = await tx.wait()
 
     _sendLogToClient(`SaltRobos: register:registerAllSteps:success:${signer} => response`, {res}, responsePayload)
@@ -227,7 +227,7 @@ socket.on(
     try {
       _sendLogToClient(`SaltRobos: proposeTransaction:signTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
-      const tx = await signTx(accountAddress, Number(txId), signers[signer],undefined,250000)
+      const tx = await signTx(accountAddress, Number(txId), signers[signer]) as ethers.ContractTransaction
       const res = await tx.wait()
 
       _sendLogToClient(`SaltRobos: proposeTransaction:signTx:success:${signer} => response`, {res}, responsePayload)
