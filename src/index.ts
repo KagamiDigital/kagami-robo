@@ -97,7 +97,7 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
   try {
 
     _sendLogToClient(`SaltRobos: pre-registration:start:${signer} => expect success or failure`, {}, responsePayload)
-    const tx = await preRegistration(accountAddress, signers[signer])
+    const tx = await preRegistration(accountAddress, signers[signer]) as ethers.ContractTransaction
     const res = await tx.wait();
 
     _sendLogToClient(`SaltRobos: pre-registration:success:${signer} => response`, {res}, responsePayload)
@@ -168,7 +168,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
   try {
     _sendLogToClient(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
     
-    const res = await automateRegistration(accountAddress, signer, signers[signer])
+    const res = await automateRegistration(accountAddress, signers[signer])
     
     _sendLogToClient(`SaltRobos: register:automateRegistration:success:${signer} => response`, {res}, responsePayload)
 
@@ -190,7 +190,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
 
   try {
     _sendLogToClient(`SaltRobos: register:registerAllSteps:start:${signer} => expect success or failure`, {}, responsePayload)
-    const tx = await registerAllSteps(accountAddress, signers[signer])
+    const tx = await registerAllSteps(accountAddress, signers[signer]) as ethers.ContractTransaction
     const res = await tx.wait()
 
     _sendLogToClient(`SaltRobos: register:registerAllSteps:success:${signer} => response`, {res}, responsePayload)
@@ -227,7 +227,7 @@ socket.on(
     try {
       _sendLogToClient(`SaltRobos: proposeTransaction:signTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
-      const tx = await signTx(accountAddress, Number(txId), signers[signer],undefined,250000)
+      const tx = await signTx(accountAddress, Number(txId), signers[signer]) as ethers.ContractTransaction
       const res = await tx.wait()
 
       _sendLogToClient(`SaltRobos: proposeTransaction:signTx:success:${signer} => response`, {res}, responsePayload)
@@ -280,12 +280,13 @@ socket.on(
       return; 
     }
 
-    let combineResponse;  
+    let combineResponse:string;  
 
     try {
       _sendLogToClient(`SaltRobos: broadcastTransaction:combineTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
-      combineResponse = await combineSignedTx(accountAddress, Number(txId), signers[signer])
+      combineResponse = await combineSignedTx(accountAddress, Number(txId), signers[signer]);
+      console.log('THE COMBINE RESPONSE IS!!!! : ',combineResponse)
       _sendLogToClient(`SaltRobos: broadcastTransaction:combineTx:success:${signer} => response`, {combineResponse}, responsePayload)
 
       socket.emit("transactionCombiningComplete", {
@@ -299,7 +300,7 @@ socket.on(
 
       logger.error(`Log:Error: Error broadcastTransaction:combineTx:failure:${signer}`, error)
 
-      socket.emit("transactionBroadcastingComplete", {
+      socket.emit("SignatureCombineComplete", {
         ...responsePayload,
         success: false,
         error,
@@ -312,7 +313,7 @@ socket.on(
 
       const _provider = new ethers.providers.StaticJsonRpcProvider({url: RPC_NODE_URL || "",skipFetchSetup:true});
 
-      const txResponse = await _provider.sendTransaction(combineResponse.combinedTxHash.finalSignedTransaction); 
+      const txResponse = await _provider.sendTransaction(combineResponse); 
 
       const txReceipt= await txResponse.wait(); 
 
