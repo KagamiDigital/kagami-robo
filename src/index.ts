@@ -286,7 +286,6 @@ socket.on(
       _sendLogToClient(`SaltRobos: broadcastTransaction:combineTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
       combineResponse = await combineSignedTx(accountAddress, Number(txId), signers[signer]);
-      console.log('THE COMBINE RESPONSE IS!!!! : ',combineResponse)
       _sendLogToClient(`SaltRobos: broadcastTransaction:combineTx:success:${signer} => response`, {combineResponse}, responsePayload)
 
       socket.emit("transactionCombiningComplete", {
