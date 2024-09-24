@@ -260,8 +260,6 @@ socket.on(
     const { accountAddress, txId, networkId, signer } = data;
     const responsePayload = { accountAddress, txId, signer, txReceipt: null };
 
-    console.log('THE NETWORK ID IS!!! ', networkId); 
-
     _sendLogToClient(`SaltRobos: broadcastTransaction:signTx:${signer} => Event Received`, {}, responsePayload); 
 
     const RPC_NODE_URL = getRPCNodeFromNetworkId(networkId);  
@@ -311,8 +309,6 @@ socket.on(
     try {
 
       _sendLogToClient(`SaltRobos: broadcastTransaction:sendTx:start:${signer} => expect success or failure`, {}, responsePayload)
-
-      console.log('THE NODE URL IS!!!',RPC_NODE_URL);
 
       const _provider = new ethers.providers.StaticJsonRpcProvider({url: RPC_NODE_URL || "",skipFetchSetup:true});
 
