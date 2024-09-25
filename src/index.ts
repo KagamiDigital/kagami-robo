@@ -4,7 +4,7 @@ import {io} from 'socket.io-client'
 dotenv.config();
 
 import { ethers } from "ethers";
-const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.SEPOLIA_NODE_URL || "",skipFetchSetup:true});
+const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true});
 const signers: { [index: string]: ethers.Wallet } = {};
 
 import {
@@ -186,7 +186,6 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
 
     return; 
   }
-
 
   try {
     _sendLogToClient(`SaltRobos: register:registerAllSteps:start:${signer} => expect success or failure`, {}, responsePayload)
