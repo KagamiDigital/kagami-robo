@@ -79,20 +79,29 @@ async function createKMSKeyWithExternalOrigin() {
 async function getImportParameters(keyId) {
     const params = {
         KeyId: keyId,
-        WrappingAlgorithm: 'RSAES_OAEP_SHA_256',
+        WrappingAlgorithm: 'RSA_AES_KEY_WRAP_SHA_256',  // Changed this
         WrappingKeySpec: 'RSA_2048'
     };
 
     try {
         const command = new GetParametersForImportCommand(params);
         const response = await kmsClient.send(command);
+
+        await logToFile({
+            event: 'import_parameters_received',
+            keyId,
+            publicKeyLength: response.PublicKey.length,
+            importTokenLength: response.ImportToken.length,
+            wrappingAlgorithm: 'RSA_AES_KEY_WRAP_SHA_256'
+        });
+
         return {
             publicKey: response.PublicKey,
             importToken: response.ImportToken
         };
     } catch (error) {
         await logToFile({
-            event: 'import_parameters_error',
+            event: 'get_parameters_error',
             keyId,
             error: error.message,
             stack: error.stack
@@ -101,11 +110,8 @@ async function getImportParameters(keyId) {
     }
 }
 
-function wrapKeyMaterial(keyMaterial, publicKey) {
 
-	const padding = crypto.constants.RSA_PKCS1_OAEP_PADDING;
-    const oaepHash = 'sha256';
-
+async function wrapKeyMaterial(keyMaterial, publicKey) {
     try {
         // Convert KMS public key from DER format
         const pubKeyObject = crypto.createPublicKey({
@@ -122,30 +128,33 @@ function wrapKeyMaterial(keyMaterial, publicKey) {
             throw new Error(`Invalid private key length: ${rawPrivateKey.length}`);
         }
 
-        // Log key lengths for debugging
-        await logToFile({
-            event: 'key_preparation',
-            rawKeyLength: rawPrivateKey.length,
-            publicKeyLength: publicKey.length
-        });
+        // Generate a random 256-bit AES key
+        const aesKey = crypto.randomBytes(32);
 
-        // Wrap the key material using OAEP padding
-        const wrappedKey = crypto.publicEncrypt(
+        // Wrap the private key with the AES key
+        const cipher = crypto.createCipheriv('aes-256-wrap', aesKey, Buffer.from('A6A6A6A6A6A6A6A6', 'hex'));
+        const wrappedPrivateKey = Buffer.concat([cipher.update(rawPrivateKey), cipher.final()]);
+
+        // Encrypt the AES key with the RSA public key
+        const encryptedAesKey = crypto.publicEncrypt(
             {
                 key: pubKeyObject,
-                padding: padding,
-                oaepHash: oaepHash
+                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                oaepHash: 'sha256'
             },
-            rawPrivateKey
+            aesKey
         );
 
-        // Log wrapped key details
+        // Combine the encrypted AES key and wrapped private key
+        const finalWrappedKey = Buffer.concat([encryptedAesKey, wrappedPrivateKey]);
+
         await logToFile({
             event: 'key_wrapped',
-            wrappedKeyLength: wrappedKey.length
+            wrappedKeyLength: finalWrappedKey.length,
+            algorithm: 'RSA_AES_KEY_WRAP_SHA_256'
         });
 
-        return wrappedKey;
+        return finalWrappedKey;
     } catch (error) {
         await logToFile({
             event: 'key_wrapping_error',
@@ -153,27 +162,31 @@ function wrapKeyMaterial(keyMaterial, publicKey) {
             stack: error.stack
         }, 'error');
         throw error;
-    }}
+    }
+}
+
 
 async function importKeyToKMS(keyId, wrappedKeyMaterial, importToken) {
     try {
+        const base64WrappedKey = wrappedKeyMaterial.toString('base64');
 
-        // Log import parameters (safely)
         await logToFile({
             event: 'import_attempt',
             keyId,
             wrappedKeyLength: wrappedKeyMaterial.length,
-            importTokenLength: importToken.length
+            base64KeyLength: base64WrappedKey.length,
+            importTokenLength: importToken.length,
+            wrappingAlgorithm: 'RSA_AES_KEY_WRAP_SHA_256'  // Added for logging
         });
 
-	    const params = {
-	        KeyId: keyId,
-	        ImportToken: importToken,
-	        WrappingAlgorithm: 'RSAES_OAEP_SHA_256',
-	        WrappingKeySpec: 'RSA_2048',
-	        ExpirationModel: 'KEY_MATERIAL_DOES_NOT_EXPIRE',
-			EncryptedKeyMaterial: wrappedKeyMaterial  // AWS SDK will handle Buffer automatically
-	    };
+        const params = {
+            KeyId: keyId,
+            ImportToken: importToken,
+            WrappingAlgorithm: 'RSA_AES_KEY_WRAP_SHA_256',  // Changed this
+            WrappingKeySpec: 'RSA_2048',
+            ExpirationModel: 'KEY_MATERIAL_DOES_NOT_EXPIRE',
+            EncryptedKeyMaterial: base64WrappedKey
+        };
 
         const command = new ImportKeyMaterialCommand(params);
         await kmsClient.send(command);
@@ -195,6 +208,7 @@ async function importKeyToKMS(keyId, wrappedKeyMaterial, importToken) {
         throw error;
     }
 }
+
 
 async function generateAndImportKeys(numKeys) {
     const results = [];
@@ -227,7 +241,7 @@ async function generateAndImportKeys(numKeys) {
             });
 
             // Wrap the key material
-            const wrappedKeyMaterial = wrapKeyMaterial(privateKey, publicKey);
+            const wrappedKeyMaterial = await wrapKeyMaterial(privateKey, publicKey);
 
             // Log wrapped material details (safely)
             await logToFile({
