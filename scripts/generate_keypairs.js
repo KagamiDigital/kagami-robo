@@ -110,14 +110,21 @@ function wrapKeyMaterial(keyMaterial, publicKey) {
         type: 'spki'
     });
 
-    return crypto.publicEncrypt(
+    // Ensure key material is proper length (32 bytes for secp256k1)
+    const keyBuffer = Buffer.from(keyMaterial.slice(2), 'hex');
+
+    // Wrap the key material
+    const wrappedKey = crypto.publicEncrypt(
         {
             key: pubKeyObject,
             padding: padding,
             oaepHash: oaepHash
         },
-        Buffer.from(keyMaterial.slice(2), 'hex')
+        keyBuffer
     );
+
+    // Return base64-encoded wrapped key
+    return wrappedKey;
 }
 
 async function importKeyToKMS(keyId, wrappedKeyMaterial, importToken) {
@@ -127,14 +134,13 @@ async function importKeyToKMS(keyId, wrappedKeyMaterial, importToken) {
         WrappingAlgorithm: 'RSAES_OAEP_SHA_256',
         WrappingKeySpec: 'RSA_2048',
         ExpirationModel: 'KEY_MATERIAL_DOES_NOT_EXPIRE',
-        KeyMaterial: wrappedKeyMaterial
+        KeyMaterial: wrappedKeyMaterial  // AWS SDK will handle Buffer automatically
     };
 
     try {
         const command = new ImportKeyMaterialCommand(params);
         await kmsClient.send(command);
 
-        // Log successful import
         await logToFile({
             event: 'key_imported',
             keyId,
@@ -163,14 +169,35 @@ async function generateAndImportKeys(numKeys) {
             const privateKey = wallet.privateKey;
             const address = wallet.address;
 
-            // Create KMS key with external origin
+            // Log key generation (without exposing private key)
+            await logToFile({
+                event: 'key_generation',
+                address,
+                privateKeyLength: privateKey.length
+            });
+
+            // Create KMS key
             const keyId = await createKMSKeyWithExternalOrigin();
 
             // Get import parameters
             const { publicKey, importToken } = await getImportParameters(keyId);
 
+            // Log wrapping attempt
+            await logToFile({
+                event: 'wrapping_key',
+                keyId,
+                publicKeyLength: publicKey.length
+            });
+
             // Wrap the key material
             const wrappedKeyMaterial = wrapKeyMaterial(privateKey, publicKey);
+
+            // Log wrapped material details (safely)
+            await logToFile({
+                event: 'wrapped_key',
+                keyId,
+                wrappedKeyLength: wrappedKeyMaterial.length
+            });
 
             // Import the wrapped key material
             await importKeyToKMS(keyId, wrappedKeyMaterial, importToken);
@@ -183,7 +210,6 @@ async function generateAndImportKeys(numKeys) {
 
             results.push(result);
 
-            // Log successful key pair generation and import
             await logToFile({
                 event: 'keypair_created',
                 ...result
