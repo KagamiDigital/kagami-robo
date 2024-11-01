@@ -139,6 +139,7 @@ async function wrapKeyMaterial(keyMaterial, publicKey) {
 
         await logToFile({
             event: 'key_wrapped',
+            originalKeyLength: rawPrivateKey.length,
             wrappedKeyLength: wrappedKey.length,
             algorithm: 'RSAES_OAEP_SHA_1'
         });
