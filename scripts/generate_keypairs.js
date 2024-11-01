@@ -134,7 +134,7 @@ async function importKeyToKMS(keyId, wrappedKeyMaterial, importToken) {
         WrappingAlgorithm: 'RSAES_OAEP_SHA_256',
         WrappingKeySpec: 'RSA_2048',
         ExpirationModel: 'KEY_MATERIAL_DOES_NOT_EXPIRE',
-        KeyMaterial: wrappedKeyMaterial  // AWS SDK will handle Buffer automatically
+		EncryptedKeyMaterial: wrappedKeyMaterial  // AWS SDK will handle Buffer automatically
     };
 
     try {
