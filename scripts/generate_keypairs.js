@@ -56,11 +56,12 @@ async function createKMSKeyWithExternalOrigin() {
         const command = new CreateKeyCommand(createKeyParams);
         const response = await kmsClient.send(command);
 
-        // Log key creation
+        // Log full key metadata
         await logToFile({
             event: 'key_created',
             keyId: response.KeyMetadata.KeyId,
             arn: response.KeyMetadata.Arn,
+            keySpec: response.KeyMetadata.KeySpec,  // Add this to verify
             creationDate: response.KeyMetadata.CreationDate
         });
 
@@ -101,43 +102,79 @@ async function getImportParameters(keyId) {
 }
 
 function wrapKeyMaterial(keyMaterial, publicKey) {
-    const padding = crypto.constants.RSA_PKCS1_OAEP_PADDING;
+
+	const padding = crypto.constants.RSA_PKCS1_OAEP_PADDING;
     const oaepHash = 'sha256';
 
-    const pubKeyObject = crypto.createPublicKey({
-        key: publicKey,
-        format: 'der',
-        type: 'spki'
-    });
+    try {
+        // Convert KMS public key from DER format
+        const pubKeyObject = crypto.createPublicKey({
+            key: publicKey,
+            format: 'der',
+            type: 'spki'
+        });
 
-    // Ensure key material is proper length (32 bytes for secp256k1)
-    const keyBuffer = Buffer.from(keyMaterial.slice(2), 'hex');
+        // Remove '0x' prefix and convert to Buffer
+        const rawPrivateKey = Buffer.from(keyMaterial.slice(2), 'hex');
 
-    // Wrap the key material
-    const wrappedKey = crypto.publicEncrypt(
-        {
-            key: pubKeyObject,
-            padding: padding,
-            oaepHash: oaepHash
-        },
-        keyBuffer
-    );
+        // For ECC_SECG_P256K1, we need to ensure the key is exactly 32 bytes
+        if (rawPrivateKey.length !== 32) {
+            throw new Error(`Invalid private key length: ${rawPrivateKey.length}`);
+        }
 
-    // Return base64-encoded wrapped key
-    return wrappedKey;
-}
+        // Log key lengths for debugging
+        await logToFile({
+            event: 'key_preparation',
+            rawKeyLength: rawPrivateKey.length,
+            publicKeyLength: publicKey.length
+        });
+
+        // Wrap the key material using OAEP padding
+        const wrappedKey = crypto.publicEncrypt(
+            {
+                key: pubKeyObject,
+                padding: padding,
+                oaepHash: oaepHash
+            },
+            rawPrivateKey
+        );
+
+        // Log wrapped key details
+        await logToFile({
+            event: 'key_wrapped',
+            wrappedKeyLength: wrappedKey.length
+        });
+
+        return wrappedKey;
+    } catch (error) {
+        await logToFile({
+            event: 'key_wrapping_error',
+            error: error.message,
+            stack: error.stack
+        }, 'error');
+        throw error;
+    }}
 
 async function importKeyToKMS(keyId, wrappedKeyMaterial, importToken) {
-    const params = {
-        KeyId: keyId,
-        ImportToken: importToken,
-        WrappingAlgorithm: 'RSAES_OAEP_SHA_256',
-        WrappingKeySpec: 'RSA_2048',
-        ExpirationModel: 'KEY_MATERIAL_DOES_NOT_EXPIRE',
-		EncryptedKeyMaterial: wrappedKeyMaterial  // AWS SDK will handle Buffer automatically
-    };
-
     try {
+
+        // Log import parameters (safely)
+        await logToFile({
+            event: 'import_attempt',
+            keyId,
+            wrappedKeyLength: wrappedKeyMaterial.length,
+            importTokenLength: importToken.length
+        });
+
+	    const params = {
+	        KeyId: keyId,
+	        ImportToken: importToken,
+	        WrappingAlgorithm: 'RSAES_OAEP_SHA_256',
+	        WrappingKeySpec: 'RSA_2048',
+	        ExpirationModel: 'KEY_MATERIAL_DOES_NOT_EXPIRE',
+			EncryptedKeyMaterial: wrappedKeyMaterial  // AWS SDK will handle Buffer automatically
+	    };
+
         const command = new ImportKeyMaterialCommand(params);
         await kmsClient.send(command);
 
