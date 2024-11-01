@@ -1,4 +1,5 @@
 const { ethers } = require('ethers');
+const { spawn } = require('child_process');
 const {
     KMSClient,
     CreateKeyCommand,
@@ -110,50 +111,59 @@ async function getImportParameters(keyId) {
     }
 }
 
+
 async function wrapKeyMaterial(keyMaterial, publicKey) {
     try {
-        // Convert KMS public key from DER format
-        const pubKeyObject = crypto.createPublicKey({
-            key: publicKey,
-            format: 'der',
-            type: 'spki'
-        });
-
-        // Remove '0x' prefix and convert to Buffer
+        // Remove '0x' prefix and get raw private key
         const rawPrivateKey = Buffer.from(keyMaterial.slice(2), 'hex');
 
-        // For ECC_SECG_P256K1, we need to ensure the key is exactly 32 bytes
-        if (rawPrivateKey.length !== 32) {
-            throw new Error(`Invalid private key length: ${rawPrivateKey.length}`);
-        }
+        // Create OpenSSL process
+        const openssl = spawn('openssl', ['pkcs8', '-topk8', '-outform', 'der', '-nocrypt']);
 
-        // Wrap the key material using OAEP with SHA-1
-        const wrappedKey = crypto.publicEncrypt(
-            {
-                key: pubKeyObject,
-                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-                oaepHash: 'sha1'  // Changed to sha1 to match KMS algorithm
-            },
-            rawPrivateKey
-        );
+        // Write the private key to OpenSSL's stdin
+        openssl.stdin.write(rawPrivateKey);
+        openssl.stdin.end();
 
-        await logToFile({
-            event: 'key_wrapped',
-            originalKeyLength: rawPrivateKey.length,
-            wrappedKeyLength: wrappedKey.length,
-            algorithm: 'RSAES_OAEP_SHA_1'
+        // Collect the PKCS8 formatted key
+        const chunks = [];
+        openssl.stdout.on('data', (chunk) => chunks.push(chunk));
+
+        return new Promise((resolve, reject) => {
+            openssl.on('close', (code) => {
+                if (code !== 0) {
+                    reject(new Error(`OpenSSL process exited with code ${code}`));
+                    return;
+                }
+
+                const pkcs8Key = Buffer.concat(chunks);
+
+                // Convert KMS public key from DER format
+                const pubKeyObject = crypto.createPublicKey({
+                    key: publicKey,
+                    format: 'der',
+                    type: 'spki'
+                });
+
+                // Wrap the PKCS8 formatted key
+                const wrappedKey = crypto.publicEncrypt(
+                    {
+                        key: pubKeyObject,
+                        padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                        oaepHash: 'sha1'
+                    },
+                    pkcs8Key
+                );
+
+                resolve(wrappedKey);
+            });
+
+            openssl.on('error', reject);
         });
-
-        return wrappedKey;
     } catch (error) {
-        await logToFile({
-            event: 'key_wrapping_error',
-            error: error.message,
-            stack: error.stack
-        }, 'error');
         throw error;
     }
 }
+
 
 
 async function importKeyToKMS(keyId, wrappedKeyMaterial, importToken) {
