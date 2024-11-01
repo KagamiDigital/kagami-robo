@@ -110,7 +110,7 @@ async function getImportParameters(keyId) {
     }
 }
 
-function wrapKeyMaterial(keyMaterial, publicKey) {
+async function wrapKeyMaterial(keyMaterial, publicKey) {
     try {
         // Convert KMS public key from DER format
         const pubKeyObject = crypto.createPublicKey({
