@@ -79,8 +79,8 @@ async function createKMSKeyWithExternalOrigin() {
 async function getImportParameters(keyId) {
     const params = {
         KeyId: keyId,
-        WrappingAlgorithm: 'RSAES_OAEP_SHA_1',  // Changed to simpler algorithm
-        WrappingKeySpec: 'RSA_2048'
+        WrappingAlgorithm: 'RSA_AES_KEY_WRAP_SHA_256',  // Changed to simpler algorithm
+        WrappingKeySpec: 'RSA_4096'
     };
 
     try {
@@ -92,7 +92,7 @@ async function getImportParameters(keyId) {
             keyId,
             publicKeyLength: response.PublicKey.length,
             importTokenLength: response.ImportToken.length,
-            wrappingAlgorithm: 'RSAES_OAEP_SHA_1'
+            wrappingAlgorithm: 'RSA_AES_KEY_WRAP_SHA_256'
         });
 
         return {
@@ -163,14 +163,14 @@ async function importKeyToKMS(keyId, wrappedKeyMaterial, importToken) {
             keyId,
             wrappedKeyLength: wrappedKeyMaterial.length,
             importTokenLength: importToken.length,
-            wrappingAlgorithm: 'RSAES_OAEP_SHA_1'
+            WrappingAlgorithm: 'RSA_AES_KEY_WRAP_SHA_256',
         });
 
         const params = {
             KeyId: keyId,
             ImportToken: importToken,
-            WrappingAlgorithm: 'RSAES_OAEP_SHA_1',
-            WrappingKeySpec: 'RSA_2048',
+            WrappingAlgorithm: 'RSA_AES_KEY_WRAP_SHA_256',
+            WrappingKeySpec: 'RSA_4096',
             ExpirationModel: 'KEY_MATERIAL_DOES_NOT_EXPIRE',
             EncryptedKeyMaterial: wrappedKeyMaterial  // Send the buffer directly
         };
