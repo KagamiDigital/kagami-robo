@@ -46,6 +46,12 @@ async function prepareKeyFiles() {
 
         // Write files
         await fs.writeFile(
+            path.join(outputDir, 'PlaintextPrivateKey'),
+            wallet.privateKey
+        );
+
+        // Write files
+        await fs.writeFile(
             path.join(outputDir, 'PlaintextKeyMaterial.bin'),
             privateKey
         );
