@@ -13,6 +13,7 @@ const path = require('path');
 // AWS configuration
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 const kmsClient = new KMSClient({ region: AWS_REGION });
+const WRAPPING_ALGORITHM = 'RSAES_OAEP_SHA_1'
 
 // Logging utility
 async function logToFile(data, logType = 'key-generation') {
@@ -80,8 +81,8 @@ async function createKMSKeyWithExternalOrigin() {
 async function getImportParameters(keyId) {
     const params = {
         KeyId: keyId,
-        WrappingAlgorithm: 'RSA_AES_KEY_WRAP_SHA_256',  // Changed to simpler algorithm
-        WrappingKeySpec: 'RSA_4096'
+        WrappingAlgorithm: WRAPPING_ALGORITHM,  // Changed to simpler algorithm
+        WrappingKeySpec: 'RSA_2048'
     };
 
     try {
@@ -93,7 +94,7 @@ async function getImportParameters(keyId) {
             keyId,
             publicKeyLength: response.PublicKey.length,
             importTokenLength: response.ImportToken.length,
-            wrappingAlgorithm: 'RSA_AES_KEY_WRAP_SHA_256'
+            wrappingAlgorithm: WRAPPING_ALGORITHM,
         });
 
         return {
@@ -112,54 +113,41 @@ async function getImportParameters(keyId) {
 }
 
 
-async function wrapKeyMaterial(keyMaterial, publicKey) {
+function wrapKeyMaterial(keyMaterial, publicKey) {
     try {
-        // Remove '0x' prefix and get raw private key
-        const rawPrivateKey = Buffer.from(keyMaterial.slice(2), 'hex');
 
-        // Create OpenSSL process
-        const openssl = spawn('openssl', ['pkcs8', '-topk8', '-outform', 'der', '-nocrypt']);
+        // Convert hex string to binary Buffer
+        // Remove '0x' prefix if it exists
+        const cleanHex = plaintextKeyMaterialHex.replace('0x', '');
+        const binaryKeyMaterial = Buffer.from(cleanHex, 'hex');
 
-        // Write the private key to OpenSSL's stdin
-        openssl.stdin.write(rawPrivateKey);
-        openssl.stdin.end();
-
-        // Collect the PKCS8 formatted key
-        const chunks = [];
-        openssl.stdout.on('data', (chunk) => chunks.push(chunk));
-
-        return new Promise((resolve, reject) => {
-            openssl.on('close', (code) => {
-                if (code !== 0) {
-                    reject(new Error(`OpenSSL process exited with code ${code}`));
-                    return;
-                }
-
-                const pkcs8Key = Buffer.concat(chunks);
-
-                // Convert KMS public key from DER format
-                const pubKeyObject = crypto.createPublicKey({
-                    key: publicKey,
-                    format: 'der',
-                    type: 'spki'
-                });
-
-                // Wrap the PKCS8 formatted key
-                const wrappedKey = crypto.publicEncrypt(
-                    {
-                        key: pubKeyObject,
-                        padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-                        oaepHash: 'sha1'
-                    },
-                    pkcs8Key
-                );
-
-                resolve(wrappedKey);
-            });
-
-            openssl.on('error', reject);
+        // Create public key object from DER format
+        const publicKey = crypto.createPublicKey({
+            key: wrappingPublicKey,
+            format: 'der',
+            type: 'spki'
         });
+
+        // Encrypt using RSA-OAEP with SHA1
+        const encryptedData = crypto.publicEncrypt(
+            {
+                key: publicKey,
+                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                oaepHash: 'sha1'
+            },
+            binaryKeyMaterial
+        );
+
+        return encryptedData;
+
     } catch (error) {
+        await logToFile({
+            event: 'key_wrap_error',
+            keyId,
+            error: error.message,
+            stack: error.stack
+        }, 'error');
+
         throw error;
     }
 }
@@ -173,14 +161,14 @@ async function importKeyToKMS(keyId, wrappedKeyMaterial, importToken) {
             keyId,
             wrappedKeyLength: wrappedKeyMaterial.length,
             importTokenLength: importToken.length,
-            WrappingAlgorithm: 'RSA_AES_KEY_WRAP_SHA_256',
+            WrappingAlgorithm: WRAPPING_ALGORITHM,
         });
 
         const params = {
             KeyId: keyId,
             ImportToken: importToken,
-            WrappingAlgorithm: 'RSA_AES_KEY_WRAP_SHA_256',
-            WrappingKeySpec: 'RSA_4096',
+            WrappingAlgorithm: WRAPPING_ALGORITHM,
+            WrappingKeySpec: 'RSA_2048',
             ExpirationModel: 'KEY_MATERIAL_DOES_NOT_EXPIRE',
             EncryptedKeyMaterial: wrappedKeyMaterial  // Send the buffer directly
         };
@@ -238,7 +226,7 @@ async function generateAndImportKeys(numKeys) {
             });
 
             // Wrap the key material
-            const wrappedKeyMaterial = await wrapKeyMaterial(privateKey, publicKey);
+            const wrappedKeyMaterial = wrapKeyMaterial(privateKey, publicKey);
 
             // Log wrapped material details (safely)
             await logToFile({
