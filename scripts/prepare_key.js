@@ -37,7 +37,7 @@ async function prepareKeyFiles() {
         // Get import parameters
         const importParams = {
             KeyId: keyId,
-            WrappingAlgorithm: 'RSAES_OAEP_SHA_256',
+            WrappingAlgorithm: 'RSAES_OAEP_SHA_1',
             WrappingKeySpec: 'RSA_2048'
         };
 
@@ -81,8 +81,9 @@ async function prepareKeyFiles() {
             -keyform DER \
             -pubin \
             -pkeyopt rsa_padding_mode:oaep \
-            -pkeyopt rsa_oaep_md:sha256 \
-            -pkeyopt rsa_mgf1_md:sha256`);
+			-pkeyopt rsa_oaep_md:sha1`);
+            // -pkeyopt rsa_oaep_md:sha256 \
+            // -pkeyopt rsa_mgf1_md:sha256`);
 
         console.log(`Files created in ${outputDir}:`);
         console.log('- PlaintextKeyMaterial.bin (private key)');
