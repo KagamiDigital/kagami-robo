@@ -67,29 +67,37 @@ async function runOpenSSLCommand(args, input = null) {
     });
 }
 
-async function convertToEcPem(privateKeyHex) {
+async function createEcKeyFromPrivate(privateKeyHex) {
     // Remove '0x' prefix if present
     const cleanHex = privateKeyHex.replace('0x', '');
 
+    // Create ASN.1 structure for EC private key
+    const asn1 = Buffer.concat([
+        Buffer.from('302e0201010420', 'hex'), // header
+        Buffer.from(cleanHex, 'hex'),         // private key
+        Buffer.from('a00706052b8104000a', 'hex') // secp256k1 OID
+    ]);
+
     return runOpenSSLCommand([
-        'ec',
-        '-inform', 'hex',
-        '-outform', 'pem'
-    ], Buffer.from(cleanHex, 'hex'));
+        'asn1parse',
+        '-inform', 'DER',
+        '-outform', 'DER'
+    ], asn1);
 }
 
-async function convertPemToPkcs8Der(pemKey) {
+async function convertToPkcs8Der(ecKey) {
     return runOpenSSLCommand([
         'pkcs8',
         '-topk8',
         '-nocrypt',
-        '-inform', 'pem',
-        '-outform', 'der'
-    ], pemKey);
+        '-inform', 'DER',
+        '-outform', 'DER'
+    ], ecKey);
 }
 
 async function encryptWithKmsPublicKey(derKey, wrappingPublicKey) {
-    // First write the wrapping public key to a buffer
+    const wrappingKeyBuffer = Buffer.from(wrappingPublicKey, 'base64');
+
     return runOpenSSLCommand([
         'pkeyutl',
         '-encrypt',
@@ -97,7 +105,7 @@ async function encryptWithKmsPublicKey(derKey, wrappingPublicKey) {
         '-keyform', 'DER',
         '-pkeyopt', 'rsa_padding_mode:oaep',
         '-pkeyopt', 'rsa_oaep_md:sha256'
-    ], derKey, wrappingPublicKey);
+    ], derKey, wrappingKeyBuffer);
 }
 
 // Part 2: KMS Workflows
@@ -164,8 +172,8 @@ async function processKey(privateKeyHex) {
         const { publicKey, importToken } = await getImportParameters(keyId);
 
         // Convert private key format (all in memory)
-        const pemKey = await convertToEcPem(privateKeyHex);
-        const derKey = await convertPemToPkcs8Der(pemKey);
+        const ecKey = await createEcKeyFromPrivate(privateKeyHex);
+        const derKey = await convertToPkcs8Der(ecKey);
 
         // Encrypt with KMS wrapping key
         const encryptedKeyMaterial = await encryptWithKmsPublicKey(derKey, publicKey);
