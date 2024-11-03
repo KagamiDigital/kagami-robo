@@ -43,6 +43,9 @@ async function prepareKeyFiles() {
 
         const importCommand = new GetParametersForImportCommand(importParams);
         const importResponse = await kmsClient.send(importCommand);
+	    // Decode the base64 public key first
+	    const wrappingPublicKey = Buffer.from(importResponse.PublicKey, 'base64');
+	    const wrappingImportToken = Buffer.from(importResponse.ImportToken, 'base64');
 
         // Write files
         await fs.writeFile(
@@ -58,12 +61,12 @@ async function prepareKeyFiles() {
 
         await fs.writeFile(
             path.join(outputDir, 'WrappingPublicKey.bin'),
-            importResponse.PublicKey
+            wrappingPublicKey,
         );
 
         await fs.writeFile(
             path.join(outputDir, 'ImportToken.bin'),
-            importResponse.ImportToken
+            wrappingImportToken,
         );
 
         // Save key ID for later use
