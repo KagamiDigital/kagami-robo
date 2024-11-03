@@ -113,12 +113,12 @@ async function getImportParameters(keyId) {
 }
 
 
-function wrapKeyMaterial(keyMaterial, publicKey) {
+function wrapKeyMaterial(keyMaterial, wrappingPublicKey) {
     try {
 
         // Convert hex string to binary Buffer
         // Remove '0x' prefix if it exists
-        const cleanHex = plaintextKeyMaterialHex.replace('0x', '');
+        const cleanHex = keyMaterial.replace('0x', '');
         const binaryKeyMaterial = Buffer.from(cleanHex, 'hex');
 
         // Create public key object from DER format
