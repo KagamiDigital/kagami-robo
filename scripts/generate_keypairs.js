@@ -78,7 +78,7 @@ async function createEcKeyFromPrivate(privateKeyHex) {
         Buffer.from('a00706052b8104000a', 'hex') // secp256k1 OID
     ]);
 
-    return ans1
+    return asn1
 }
 
 async function convertToPkcs8Der(ecKey) {
