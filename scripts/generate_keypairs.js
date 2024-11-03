@@ -6,284 +6,208 @@ const {
     GetParametersForImportCommand,
     ImportKeyMaterialCommand
 } = require('@aws-sdk/client-kms');
-const crypto = require('crypto');
-const fs = require('fs').promises;
 const path = require('path');
+const fs = require('fs').promises;
 
-// AWS configuration
+// Environment configuration
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
-const kmsClient = new KMSClient({ region: AWS_REGION });
-const WRAPPING_ALGORITHM = 'RSAES_OAEP_SHA_1'
+const NUM_KEYS_TO_GENERATE = parseInt(process.env.NUM_KEYS_TO_GENERATE || '1', 10);
+const LOG_SENSITIVE = process.env.LOG_SENSITIVE === 'true';
 
-// Logging utility
-async function logToFile(data, logType = 'key-generation') {
+// AWS KMS client
+const kmsClient = new KMSClient({ region: AWS_REGION });
+
+// Logging utility (only writes non-sensitive data unless LOG_SENSITIVE is true)
+async function logOperation(data, logType = 'operation') {
+    if (!LOG_SENSITIVE) {
+        delete data.privateKey;
+        delete data.publicKey;
+        delete data.wrappedKey;
+        delete data.importToken;
+    }
+
     const timestamp = new Date().toISOString();
     const logDir = path.join(process.cwd(), 'logs');
     const logFile = path.join(logDir, `${logType}-${new Date().toISOString().split('T')[0]}.log`);
 
     try {
-        // Create logs directory if it doesn't exist
         await fs.mkdir(logDir, { recursive: true });
-
-        // Prepare log entry
-        const logEntry = {
-            timestamp,
-            ...data
-        };
-
-        // Append to log file
         await fs.appendFile(
             logFile,
-            JSON.stringify(logEntry, null, 2) + '\n',
+            JSON.stringify({ timestamp, ...data }, null, 2) + '\n',
             'utf8'
         );
-
-        console.log(`Logged ${logType} entry to ${logFile}`);
     } catch (error) {
-        console.error('Error writing to log file:', error);
-        throw error;
+        console.error('Logging error:', error);
     }
 }
 
-async function createKMSKeyWithExternalOrigin() {
-    const createKeyParams = {
+// Part 1: OpenSSL Utilities (all operations in memory using pipes)
+async function runOpenSSLCommand(args, input = null) {
+    return new Promise((resolve, reject) => {
+        const process = spawn('openssl', args);
+        const stdout = [];
+        const stderr = [];
+
+        process.stdout.on('data', chunk => stdout.push(chunk));
+        process.stderr.on('data', chunk => stderr.push(chunk));
+
+        process.on('close', code => {
+            if (code !== 0) {
+                reject(new Error(`OpenSSL failed with code ${code}: ${Buffer.concat(stderr)}`));
+                return;
+            }
+            resolve(Buffer.concat(stdout));
+        });
+
+        if (input) {
+            process.stdin.write(input);
+            process.stdin.end();
+        }
+    });
+}
+
+async function convertToEcPem(privateKeyHex) {
+    // Remove '0x' prefix if present
+    const cleanHex = privateKeyHex.replace('0x', '');
+
+    return runOpenSSLCommand([
+        'ec',
+        '-inform', 'hex',
+        '-outform', 'pem'
+    ], Buffer.from(cleanHex, 'hex'));
+}
+
+async function convertPemToPkcs8Der(pemKey) {
+    return runOpenSSLCommand([
+        'pkcs8',
+        '-topk8',
+        '-nocrypt',
+        '-inform', 'pem',
+        '-outform', 'der'
+    ], pemKey);
+}
+
+async function encryptWithKmsPublicKey(derKey, wrappingPublicKey) {
+    // First write the wrapping public key to a buffer
+    return runOpenSSLCommand([
+        'pkeyutl',
+        '-encrypt',
+        '-pubin',
+        '-keyform', 'DER',
+        '-pkeyopt', 'rsa_padding_mode:oaep',
+        '-pkeyopt', 'rsa_oaep_md:sha256'
+    ], derKey, wrappingPublicKey);
+}
+
+// Part 2: KMS Workflows
+async function createKmsKey() {
+    const command = new CreateKeyCommand({
         Description: 'Imported Ethereum private key',
         KeyUsage: 'SIGN_VERIFY',
         Origin: 'EXTERNAL',
-        KeySpec: 'ECC_SECG_P256K1',
-        BypassPolicyLockoutSafetyCheck: false,
-    };
+        KeySpec: 'ECC_SECG_P256K1'
+    });
 
-    try {
-        const command = new CreateKeyCommand(createKeyParams);
-        const response = await kmsClient.send(command);
+    const response = await kmsClient.send(command);
+    await logOperation({
+        event: 'key_created',
+        keyId: response.KeyMetadata.KeyId,
+        keyArn: response.KeyMetadata.Arn
+    });
 
-        // Log full key metadata
-        await logToFile({
-            event: 'key_created',
-            keyId: response.KeyMetadata.KeyId,
-            arn: response.KeyMetadata.Arn,
-            keySpec: response.KeyMetadata.KeySpec,  // Add this to verify
-            creationDate: response.KeyMetadata.CreationDate
-        });
-
-        return response.KeyMetadata.KeyId;
-    } catch (error) {
-        await logToFile({
-            event: 'key_creation_error',
-            error: error.message,
-            stack: error.stack
-        }, 'error');
-        throw error;
-    }
+    return response.KeyMetadata.KeyId;
 }
 
 async function getImportParameters(keyId) {
-    const params = {
+    const command = new GetParametersForImportCommand({
         KeyId: keyId,
-        WrappingAlgorithm: WRAPPING_ALGORITHM,  // Changed to simpler algorithm
+        WrappingAlgorithm: 'RSAES_OAEP_SHA_256',
         WrappingKeySpec: 'RSA_2048'
+    });
+
+    const response = await kmsClient.send(command);
+    await logOperation({
+        event: 'import_parameters_received',
+        keyId,
+        wrappingAlgorithm: 'RSAES_OAEP_SHA_256'
+    });
+
+    return {
+        publicKey: response.PublicKey,
+        importToken: response.ImportToken
     };
-
-    try {
-        const command = new GetParametersForImportCommand(params);
-        const response = await kmsClient.send(command);
-
-        await logToFile({
-            event: 'import_parameters_received',
-            keyId,
-            publicKeyLength: response.PublicKey.length,
-            importTokenLength: response.ImportToken.length,
-            wrappingAlgorithm: WRAPPING_ALGORITHM,
-        });
-
-        return {
-            publicKey: response.PublicKey,
-            importToken: response.ImportToken
-        };
-    } catch (error) {
-        await logToFile({
-            event: 'get_parameters_error',
-            keyId,
-            error: error.message,
-            stack: error.stack
-        }, 'error');
-        throw error;
-    }
 }
 
+async function importKeyMaterial(keyId, encryptedKeyMaterial, importToken) {
+    const command = new ImportKeyMaterialCommand({
+        KeyId: keyId,
+        ImportToken: importToken,
+        EncryptedKeyMaterial: encryptedKeyMaterial,
+        ExpirationModel: 'KEY_MATERIAL_DOES_NOT_EXPIRE'
+    });
 
-function wrapKeyMaterial(keyMaterial, wrappingPublicKey) {
-    try {
-
-        // Convert hex string to binary Buffer
-        // Remove '0x' prefix if it exists
-        const cleanHex = keyMaterial.replace('0x', '');
-        const binaryKeyMaterial = Buffer.from(cleanHex, 'hex');
-
-        // Create public key object from DER format
-        const publicKey = crypto.createPublicKey({
-            key: wrappingPublicKey,
-            format: 'der',
-            type: 'spki'
-        });
-
-        // Encrypt using RSA-OAEP with SHA1
-        const encryptedData = crypto.publicEncrypt(
-            {
-                key: publicKey,
-                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-                oaepHash: 'sha1'
-            },
-            binaryKeyMaterial
-        );
-
-        return encryptedData;
-
-    } catch (error) {
-        logToFile({
-            event: 'key_wrap_error',
-            error: error.message,
-            stack: error.stack
-        }, 'error');
-
-        throw error;
-    }
+    await kmsClient.send(command);
+    await logOperation({
+        event: 'key_imported',
+        keyId
+    });
 }
 
-
-
-async function importKeyToKMS(keyId, wrappedKeyMaterial, importToken) {
+// Main process
+async function processKey(privateKeyHex) {
     try {
-        await logToFile({
-            event: 'import_attempt',
-            keyId,
-            wrappedKeyLength: wrappedKeyMaterial.length,
-            importTokenLength: importToken.length,
-            WrappingAlgorithm: WRAPPING_ALGORITHM,
-        });
+        // Create KMS key
+        const keyId = await createKmsKey();
 
-        const params = {
-            KeyId: keyId,
-            ImportToken: importToken,
-            WrappingAlgorithm: WRAPPING_ALGORITHM,
-            WrappingKeySpec: 'RSA_2048',
-            ExpirationModel: 'KEY_MATERIAL_DOES_NOT_EXPIRE',
-            EncryptedKeyMaterial: wrappedKeyMaterial  // Send the buffer directly
-        };
+        // Get import parameters
+        const { publicKey, importToken } = await getImportParameters(keyId);
 
-        const command = new ImportKeyMaterialCommand(params);
-        await kmsClient.send(command);
+        // Convert private key format (all in memory)
+        const pemKey = await convertToEcPem(privateKeyHex);
+        const derKey = await convertPemToPkcs8Der(pemKey);
 
-        await logToFile({
-            event: 'key_imported',
-            keyId,
-            importDate: new Date().toISOString()
-        });
+        // Encrypt with KMS wrapping key
+        const encryptedKeyMaterial = await encryptWithKmsPublicKey(derKey, publicKey);
+
+        // Import to KMS
+        await importKeyMaterial(keyId, encryptedKeyMaterial, importToken);
 
         return keyId;
     } catch (error) {
-        await logToFile({
-            event: 'key_import_error',
-            keyId,
-            error: error.message,
-            stack: error.stack
+        await logOperation({
+            event: 'process_error',
+            error: error.message
         }, 'error');
         throw error;
     }
 }
 
-
-async function generateAndImportKeys(numKeys) {
-    const results = [];
-
-    for (let i = 0; i < numKeys; i++) {
-        try {
-            // Generate new Ethereum wallet
+// Main execution
+async function main() {
+    try {
+        const results = [];
+        for (let i = 0; i < NUM_KEYS_TO_GENERATE; i++) {
             const wallet = ethers.Wallet.createRandom();
-            const privateKey = wallet.privateKey;
-            const address = wallet.address;
+            const keyId = await processKey(wallet.privateKey);
 
-            // Log key generation (without exposing private key)
-            await logToFile({
-                event: 'key_generation',
-                address,
-                privateKeyLength: privateKey.length
-            });
-
-            // Create KMS key
-            const keyId = await createKMSKeyWithExternalOrigin();
-
-            // Get import parameters
-            const { publicKey, importToken } = await getImportParameters(keyId);
-
-            // Log wrapping attempt
-            await logToFile({
-                event: 'wrapping_key',
+            results.push({
                 keyId,
-                publicKeyLength: publicKey.length
+                ethereumAddress: wallet.address
             });
 
-            // Wrap the key material
-            const wrappedKeyMaterial = wrapKeyMaterial(privateKey, publicKey);
-
-            // Log wrapped material details (safely)
-            await logToFile({
-                event: 'wrapped_key',
+            await logOperation({
+                event: 'key_processed',
                 keyId,
-                wrappedKeyLength: wrappedKeyMaterial.length
+                ethereumAddress: wallet.address
             });
-
-            // Import the wrapped key material
-            await importKeyToKMS(keyId, wrappedKeyMaterial, importToken);
-
-            const result = {
-                index: i + 1,
-                ethereumAddress: address,
-                kmsKeyId: keyId
-            };
-
-            results.push(result);
-
-            await logToFile({
-                event: 'keypair_created',
-                ...result
-            });
-
-            console.log(`Successfully generated and imported key pair ${i + 1}`);
-        } catch (error) {
-            console.error(`Error processing key pair ${i + 1}:`, error);
-            await logToFile({
-                event: 'keypair_generation_error',
-                index: i + 1,
-                error: error.message,
-                stack: error.stack
-            }, 'error');
         }
-    }
 
-    return results;
+        console.log('Processed Keys:', results);
+    } catch (error) {
+        console.error('Main process error:', error);
+        process.exit(1);
+    }
 }
 
-// Command line argument for number of keys or default to 1
-const NUM_KEYS_TO_GENERATE = parseInt(process.env.NUM_KEYS_TO_GENERATE || '1', 10);
-
-// Run the script
-generateAndImportKeys(NUM_KEYS_TO_GENERATE)
-    .then(results => {
-        console.log(`\nGenerating ${NUM_KEYS_TO_GENERATE} Key Pairs:`);
-        results.forEach(result => {
-            console.log(`\nPair ${result.index}:`);
-            console.log(`Ethereum Address: ${result.ethereumAddress}`);
-            console.log(`AWS KMS Key ID: ${result.kmsKeyId}`);
-        });
-    })
-    .catch(async error => {
-        console.error('Script failed:', error);
-        await logToFile({
-            event: 'script_error',
-            error: error.message,
-            stack: error.stack
-        }, 'error');
-        process.exit(1);
-    });
+main();
