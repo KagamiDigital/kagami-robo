@@ -143,7 +143,6 @@ function wrapKeyMaterial(keyMaterial, publicKey) {
     } catch (error) {
         logToFile({
             event: 'key_wrap_error',
-            keyId,
             error: error.message,
             stack: error.stack
         }, 'error');
