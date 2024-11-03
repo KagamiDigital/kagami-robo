@@ -141,7 +141,7 @@ function wrapKeyMaterial(keyMaterial, publicKey) {
         return encryptedData;
 
     } catch (error) {
-        await logToFile({
+        logToFile({
             event: 'key_wrap_error',
             keyId,
             error: error.message,
