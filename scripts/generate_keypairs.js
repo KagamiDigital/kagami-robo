@@ -78,21 +78,25 @@ async function createEcKeyFromPrivate(privateKeyHex) {
         Buffer.from('a00706052b8104000a', 'hex') // secp256k1 OID
     ]);
 
-    return runOpenSSLCommand([
-        'asn1parse',
-        '-inform', 'DER',
-        '-outform', 'DER'
-    ], asn1);
+    return ans1
 }
 
 async function convertToPkcs8Der(ecKey) {
+    // First convert to PEM format
+    const pemResult = await runOpenSSLCommand([
+        'ec',
+        '-inform', 'DER',
+        '-outform', 'PEM',
+    ], ecKey);
+
+    // Then convert PEM to PKCS8 DER
     return runOpenSSLCommand([
         'pkcs8',
         '-topk8',
         '-nocrypt',
-        '-inform', 'DER',
+        '-inform', 'PEM',
         '-outform', 'DER'
-    ], ecKey);
+    ], pemResult);
 }
 
 async function encryptWithKmsPublicKey(derKey, wrappingPublicKey) {
