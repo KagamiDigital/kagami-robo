@@ -61,16 +61,27 @@ class KMSEthereumSigner extends ethers.Signer {
     async signTransaction(transaction) {
         const tx = await ethers.utils.resolveProperties(transaction);
 
-        // Default values matching the Python implementation
+        // Handle both EIP-1559 and legacy transactions
         const baseTx = {
-            nonce: tx.nonce,
-            gasPrice: tx.gasPrice || '0x0918400000',
-            gasLimit: tx.gasLimit || 160000,
-            to: tx.to,
+            chainId: tx.chainId || (await this.provider.getNetwork()).chainId,
+            data: tx.data || "",
+            to: tx.to || undefined,
+            nonce: tx.nonce ? tx.nonce : await this.provider.getTransactionCount(await this.getAddress()),
             value: tx.value || 0,
-            data: tx.data || '0x00',
-            chainId: tx.chainId || 1
         };
+
+        // EIP-1559 transaction
+        if (tx.type === 2 || tx.maxFeePerGas || tx.maxPriorityFeePerGas) {
+            baseTx.type = 2;
+            baseTx.maxPriorityFeePerGas = tx.maxPriorityFeePerGas || tx.maxFeePerGas || 0;
+            baseTx.maxFeePerGas = tx.maxFeePerGas || tx.maxPriorityFeePerGas || 0;
+            baseTx.gasLimit = tx.gasLimit || undefined;
+        }
+        // Legacy transaction
+        else {
+            baseTx.gasPrice = tx.gasPrice || undefined;
+            baseTx.gasLimit = tx.gasLimit || undefined;
+        }
 
         const unsignedTx = ethers.utils.serializeTransaction(baseTx);
         const transactionHash = ethers.utils.keccak256(unsignedTx);
