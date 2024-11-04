@@ -115,7 +115,7 @@ function encryptWithKmsPublicKey(ecPrivateKeyDer, wrappingPublicKeyBase64) {
     });
 
     // Encrypt the DER-formatted private key using RSA-OAEP with SHA-256
-    const encryptedData = crypto.publicEncrypt(
+    const encryptedPrivateKey = crypto.publicEncrypt(
         {
             key: publicKeyObject,
             padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
@@ -124,7 +124,7 @@ function encryptWithKmsPublicKey(ecPrivateKeyDer, wrappingPublicKeyBase64) {
         ecPrivateKeyDer  // The DER-formatted EC private key
     );
 
-    return encryptedData;
+    return encryptedPrivateKey;
 }
 
 // Part 2: KMS Workflows
