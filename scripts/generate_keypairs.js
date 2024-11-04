@@ -130,13 +130,14 @@ function encryptWithKmsPublicKey(ecPrivateKeyDer, wrappingPublicKeyBase64) {
 // Part 2: KMS Workflows
 async function createKmsKey() {
     const command = new CreateKeyCommand({
-        Description: 'Imported Ethereum private key',
+        Description: 'Imported Ethereum Private Key',
         KeyUsage: 'SIGN_VERIFY',
         Origin: 'EXTERNAL',
         KeySpec: 'ECC_SECG_P256K1'
     });
 
     const response = await kmsClient.send(command);
+
     await logOperation({
         event: 'key_created',
         keyId: response.KeyMetadata.KeyId,
