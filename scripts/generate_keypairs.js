@@ -1,5 +1,7 @@
 const { ethers } = require('ethers');
 const { spawn } = require('child_process');
+import * as dotenv from "dotenv"
+dotenv.config();
 const {
     KMSClient,
     CreateKeyCommand,
