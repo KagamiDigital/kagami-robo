@@ -84,26 +84,73 @@ class KMSEthereumSigner extends ethers.Signer {
             SigningAlgorithm: 'ECDSA_SHA_256'
         });
 
+        console.log('Raw KMS signature:', Buffer.from(Signature).toString('hex'));
+
         // Convert DER signature to R,S format
         const signatureBuffer = Buffer.from(Signature);
-        let pos = 2;
-        pos += 2;
-        const rLength = signatureBuffer[pos - 1];
-        const r = hexlify(signatureBuffer.slice(pos, pos + rLength));
-        pos += rLength;
-        pos += 2;
-        const sLength = signatureBuffer[pos - 1];
-        const s = hexlify(signatureBuffer.slice(pos, pos + sLength));
 
-        // Try recovery values
+        // Parse DER format
+        // Format: 0x30 bb 02 aa <r> 02 cc <s>
+        // where bb is total length
+        // aa is length of r
+        // cc is length of s
+        let pos = 2; // Skip 0x30 and total length
+
+        // Get r
+        const rLength = signatureBuffer[pos + 1]; // Skip 0x02 and get length
+        pos += 2;
+        let r = signatureBuffer.slice(pos, pos + rLength);
+        // Handle potential leading zero
+        if (r[0] === 0) {
+            r = r.slice(1);
+        }
+        pos += rLength;
+
+        // Get s
+        const sLength = signatureBuffer[pos + 1]; // Skip 0x02 and get length
+        pos += 2;
+        let s = signatureBuffer.slice(pos, pos + sLength);
+        // Handle potential leading zero
+        if (s[0] === 0) {
+            s = s.slice(1);
+        }
+
+        r = hexlify(r);
+        s = hexlify(s);
+
+        console.log('Parsed r:', r);
+        console.log('Parsed s:', s);
+        console.log('Expected address:', await this.getAddress());
+
+        // Ensure r and s are 32 bytes each
+        while (r.length < 66) r = r.replace('0x', '0x0');
+        while (s.length < 66) s = s.replace('0x', '0x0');
+
+        // Try both possible recovery values
         for (let v = 27; v <= 28; v++) {
+            const signature = { r, s, v };
             try {
-                const recovered = ethers.utils.recoverAddress(digest, { r, s, v });
-                if (recovered.toLowerCase() === (await this.getAddress()).toLowerCase()) {
-                    return ethers.utils.joinSignature({ r, s, v });
+                const recovered = ethers.utils.recoverAddress(digest, signature);
+                const actual = await this.getAddress();
+                if (recovered.toLowerCase() === actual.toLowerCase()) {
+                    return ethers.utils.joinSignature(signature);
                 }
             } catch (err) {
-                continue;
+                console.log(`Recovery attempt failed with v=${v}:`, err.message);
+            }
+        }
+
+        // If we get here, also try the compressed variants
+        for (let v = 31; v <= 32; v++) {
+            const signature = { r, s, v };
+            try {
+                const recovered = ethers.utils.recoverAddress(digest, signature);
+                const actual = await this.getAddress();
+                if (recovered.toLowerCase() === actual.toLowerCase()) {
+                    return ethers.utils.joinSignature(signature);
+                }
+            } catch (err) {
+                console.log(`Recovery attempt failed with v=${v}:`, err.message);
             }
         }
 
