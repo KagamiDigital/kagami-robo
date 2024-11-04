@@ -215,9 +215,16 @@ async function processKey(privateKeyHex) {
 async function main() {
     try {
         const results = [];
+        const keyIds = [];
         for (let i = 0; i < NUM_KEYS_TO_GENERATE; i++) {
-            const wallet = ethers.Wallet.createRandom();
+
+            const mnemonic = ethers.Mnemonic.createRandom()
+            const wallet = ethers.Wallet.fromPhrase(mnemonic.phrase)
+            console.log("mnemonic phrase", mnemonic.phrase)
+
             const keyId = await processKey(wallet.privateKey);
+
+            keyIds.push(keyId);
 
             results.push({
                 keyId,
@@ -232,6 +239,14 @@ async function main() {
         }
 
         console.log('Processed Keys:', results);
+
+        // Append keyIds to .env file
+        const fs = require('fs');
+        const keyIdsString = `\nKMS_KEY_IDS=${keyIds.join(',')}`
+
+        fs.appendFileSync('.env', keyIdsString);
+        console.log('Added key IDs to .env file');
+
     } catch (error) {
         console.error('Main process error:', error);
         process.exit(1);
