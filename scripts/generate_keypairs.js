@@ -245,7 +245,7 @@ async function main() {
 
         // Append keyIds to .env file
         const fs = require('fs');
-        const keyIdsString = `\nKMS_KEY_IDS=${keyIds.join(',')}`
+        const keyIdsString = `\nKMS_KEY_IDS="${keyIds.join(',')}"`
 
         fs.appendFileSync('.env', keyIdsString);
         console.log('Added key IDs to .env file');
