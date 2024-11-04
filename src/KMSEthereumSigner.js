@@ -1,6 +1,6 @@
 const { KMS } = require('@aws-sdk/client-kms');
 const { ethers } = require('ethers');
-const { arrayify, hexlify, stripZeros } = ethers.utils;
+const { arrayify, hexlify } = ethers.utils;
 
 class KMSEthereumSigner extends ethers.Signer {
     constructor(keyId, region, provider) {
@@ -14,18 +14,38 @@ class KMSEthereumSigner extends ethers.Signer {
     async getAddress() {
         if (this._address) return this._address;
 
-        // Get the public key from KMS
         const { PublicKey } = await this.kms.getPublicKey({
             KeyId: this.keyId
         });
 
-        // Convert KMS public key to Ethereum address
+        // Get the raw public key bytes (skipping the ASN.1 encoding)
         const publicKeyBuffer = Buffer.from(PublicKey);
-        const uncompressedPubKey = publicKeyBuffer.slice(publicKeyBuffer.length - 64);
-        const address = ethers.utils.computeAddress(uncompressedPubKey);
+        let index = 0;
+        // Skip sequence
+        index++;
+        index += publicKeyBuffer[index] === 0x81 ? 2 : 1;
+        // Skip sequence
+        index++;
+        index += publicKeyBuffer[index] === 0x81 ? 2 : 1;
+        // Skip OID and curve OID
+        while (index < publicKeyBuffer.length && publicKeyBuffer[index] !== 0x03) {
+            index++;
+        }
+        // Skip bitstring header
+        index += 2;
+        // Skip leading zero
+        index++;
 
-        this._address = address;
-        return address;
+        // Get the raw public key (removing the 0x04 prefix)
+        const rawPubKey = publicKeyBuffer.slice(index + 1);
+
+        // Compute the Keccak-256 hash of the public key
+        const hash = ethers.utils.keccak256(rawPubKey);
+        // Take the last 20 bytes to get the address
+        const address = '0x' + hash.slice(-40);
+        // Convert to checksum address
+        this._address = ethers.utils.getAddress(address);
+        return this._address;
     }
 
     async signMessage(message) {
@@ -36,27 +56,27 @@ class KMSEthereumSigner extends ethers.Signer {
 
     async signTransaction(transaction) {
         const tx = await ethers.utils.resolveProperties(transaction);
+
+        // Default values matching the Python implementation
         const baseTx = {
-            chainId: tx.chainId || (await this.provider.getNetwork()).chainId,
-            data: tx.data || "",
-            gasLimit: tx.gasLimit || undefined,
-            gasPrice: tx.gasPrice || undefined,
-            nonce: tx.nonce ? tx.nonce : await this.provider.getTransactionCount(await this.getAddress()),
-            to: tx.to || undefined,
+            nonce: tx.nonce,
+            gasPrice: tx.gasPrice || '0x0918400000',
+            gasLimit: tx.gasLimit || 160000,
+            to: tx.to,
             value: tx.value || 0,
+            data: tx.data || '0x00',
+            chainId: tx.chainId || 1
         };
 
         const unsignedTx = ethers.utils.serializeTransaction(baseTx);
         const transactionHash = ethers.utils.keccak256(unsignedTx);
         const signature = await this.signDigest(transactionHash);
-
         return ethers.utils.serializeTransaction(baseTx, signature);
     }
 
     async signDigest(digestHex) {
         const digest = arrayify(digestHex);
 
-        // Sign the digest using KMS
         const { Signature } = await this.kms.sign({
             KeyId: this.keyId,
             Message: Buffer.from(digest),
@@ -64,23 +84,30 @@ class KMSEthereumSigner extends ethers.Signer {
             SigningAlgorithm: 'ECDSA_SHA_256'
         });
 
-        // Convert KMS signature format to Ethereum format
+        // Convert DER signature to R,S format
         const signatureBuffer = Buffer.from(Signature);
-        const r = hexlify(signatureBuffer.slice(0, 32));
-        const s = hexlify(signatureBuffer.slice(32, 64));
+        let pos = 2;
+        pos += 2;
+        const rLength = signatureBuffer[pos - 1];
+        const r = hexlify(signatureBuffer.slice(pos, pos + rLength));
+        pos += rLength;
+        pos += 2;
+        const sLength = signatureBuffer[pos - 1];
+        const s = hexlify(signatureBuffer.slice(pos, pos + sLength));
 
-        // Calculate recovery parameter v
-        let v = 27;
-        const recoveredPubKey = ethers.utils.recoverPublicKey(
-            digestHex,
-            { r, s, v }
-        );
-
-        if (recoveredPubKey !== await this.getAddress()) {
-            v = 28;
+        // Try recovery values
+        for (let v = 27; v <= 28; v++) {
+            try {
+                const recovered = ethers.utils.recoverAddress(digest, { r, s, v });
+                if (recovered.toLowerCase() === (await this.getAddress()).toLowerCase()) {
+                    return ethers.utils.joinSignature({ r, s, v });
+                }
+            } catch (err) {
+                continue;
+            }
         }
 
-        return ethers.utils.joinSignature({ r, s, v });
+        throw new Error('Failed to find correct recovery value');
     }
 
     connect(provider) {
@@ -88,4 +115,4 @@ class KMSEthereumSigner extends ethers.Signer {
     }
 }
 
-module.exports = KMSEthereumSigner
+module.exports = KMSEthereumSigner;
