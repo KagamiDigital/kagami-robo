@@ -2,6 +2,10 @@ const { KMS } = require('@aws-sdk/client-kms');
 const { ethers } = require('ethers');
 const { arrayify, hexlify } = ethers.utils;
 
+// The order of the secp256k1 curve
+const SECP256K1_N = ethers.BigNumber.from('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
+const SECP256K1_N_DIV_2 = SECP256K1_N.div(2);
+
 class KMSEthereumSigner extends ethers.Signer {
     constructor(keyId, region, provider) {
         super();
@@ -126,32 +130,40 @@ class KMSEthereumSigner extends ethers.Signer {
         while (r.length < 66) r = r.replace('0x', '0x0');
         while (s.length < 66) s = s.replace('0x', '0x0');
 
-        // Try both possible recovery values
-        for (let v = 27; v <= 28; v++) {
-            const signature = { r, s, v };
-            try {
-                const recovered = ethers.utils.recoverAddress(digest, signature);
-                const actual = await this.getAddress();
-                if (recovered.toLowerCase() === actual.toLowerCase()) {
-                    return ethers.utils.joinSignature(signature);
-                }
-            } catch (err) {
-                console.log(`Recovery attempt failed with v=${v}:`, err.message);
-            }
+        // Check if s is in the upper half of the curve order
+        let sigS = ethers.BigNumber.from(s);
+        let recovery = 0;
+
+        // If s is in the upper half, transform it to the lower half
+        if (sigS.gt(SECP256K1_N_DIV_2)) {
+            sigS = SECP256K1_N.sub(sigS);
+            recovery = 1;
         }
 
-        // If we get here, also try the compressed variants
-        for (let v = 31; v <= 32; v++) {
-            const signature = { r, s, v };
-            try {
-                const recovered = ethers.utils.recoverAddress(digest, signature);
-                const actual = await this.getAddress();
-                if (recovered.toLowerCase() === actual.toLowerCase()) {
-                    return ethers.utils.joinSignature(signature);
-                }
-            } catch (err) {
-                console.log(`Recovery attempt failed with v=${v}:`, err.message);
+        // Try the recovery values
+        const v = 27 + recovery;
+        const signature = { r, s: hexlify(sigS), v };
+
+        try {
+            const recovered = ethers.utils.recoverAddress(digest, signature);
+            const actual = await this.getAddress();
+            if (recovered.toLowerCase() === actual.toLowerCase()) {
+                return ethers.utils.joinSignature(signature);
             }
+        } catch (err) {
+            console.log(`Recovery attempt failed:`, err.message);
+        }
+
+        // Try the alternative recovery value
+        signature.v = 28 + recovery;
+        try {
+            const recovered = ethers.utils.recoverAddress(digest, signature);
+            const actual = await this.getAddress();
+            if (recovered.toLowerCase() === actual.toLowerCase()) {
+                return ethers.utils.joinSignature(signature);
+            }
+        } catch (err) {
+            console.log(`Recovery attempt failed:`, err.message);
         }
 
         throw new Error('Failed to find correct recovery value');
