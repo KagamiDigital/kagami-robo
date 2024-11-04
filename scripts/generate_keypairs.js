@@ -100,6 +100,9 @@ async function convertToPkcs8Der(ecKey) {
     ], pemResult);
 }
 
+// Encrypt using Node's Crypto Package because
+// OpenSSL pkeyutl requires using files,
+// and we don't want to store our keys on disk.
 function encryptWithKmsPublicKey(ecPrivateKeyDer, wrappingPublicKeyBase64) {
     // Decode KMS public key from base64
     const wrappingPublicKey = Buffer.from(wrappingPublicKeyBase64, 'base64');
