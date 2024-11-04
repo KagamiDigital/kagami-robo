@@ -7,6 +7,8 @@ import { ethers } from "ethers";
 const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true});
 const signers: { [index: string]: ethers.Wallet } = {};
 
+import KMSEthereumSigner from "./KMSEthereumSigner"
+
 import {
   preRegistration,
   automateRegistration,
@@ -19,9 +21,17 @@ import {
 import { getRPCNodeFromNetworkId } from "./utils";
 
 (async () => {
-  process.env.KEYS!.split(",").forEach(async (privateKey, i) => {
-    const wallet = new ethers.Wallet(privateKey);
-    const signer = wallet.connect(provider);
+
+
+  process.env.KMS_KEY_IDS!.split(",").forEach(async (keyId, i) => {
+    const signer = new KMSEthereumSigner(
+        keyId,
+        process.env.AWS_REGION,
+        provider
+    );
+
+    // const wallet = new ethers.Wallet(privateKey);
+    // const signer = wallet.connect(provider);
     const publicAddress = await signer.getAddress();
     signers[publicAddress] = signer;
     console.log(`Signer ${i + 1}`, publicAddress);
