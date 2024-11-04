@@ -7,6 +7,7 @@ const {
     ImportKeyMaterialCommand
 } = require('@aws-sdk/client-kms');
 const path = require('path');
+const crypto = require('crypto');
 const fs = require('fs').promises;
 
 // Environment configuration
