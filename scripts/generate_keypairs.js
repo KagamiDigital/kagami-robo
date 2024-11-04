@@ -218,7 +218,7 @@ async function main() {
         const keyIds = [];
         for (let i = 0; i < NUM_KEYS_TO_GENERATE; i++) {
 
-            const wallet = ethers.fromMnemonic( ethers.utils.entropyToMnemonic(ethers.utils.randomBytes(32)) )
+            const wallet = ethers.Wallet.fromMnemonic( ethers.utils.entropyToMnemonic(ethers.utils.randomBytes(32)) )
 
             await logOperation({
                 event: 'mnemonic_phrase',
