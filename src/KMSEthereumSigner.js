@@ -110,6 +110,14 @@ class KMSEthereumSigner extends ethers.Signer {
         throw new Error('Failed to find correct recovery value');
     }
 
+    async _signTypedData(domain, types, value) {
+        // Get the EIP-712 signing hash
+        const typedDataHash = ethers.utils._TypedDataEncoder.hash(domain, types, value);
+        // Sign the hash using our existing signDigest method
+        const signature = await this.signDigest(typedDataHash);
+        return signature;
+    }
+
     connect(provider) {
         return new KMSEthereumSigner(this.keyId, this.region, provider);
     }
