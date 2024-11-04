@@ -218,9 +218,12 @@ async function main() {
         const keyIds = [];
         for (let i = 0; i < NUM_KEYS_TO_GENERATE; i++) {
 
-            const mnemonic = ethers.Mnemonic.createRandom()
-            const wallet = ethers.Wallet.fromPhrase(mnemonic.phrase)
-            console.log("mnemonic phrase", mnemonic.phrase)
+            const wallet = ethers.fromMnemonic( ethers.utils.entropyToMnemonic(ethers.utils.randomBytes(32)) )
+
+            await logOperation({
+                event: 'mnemonic_phrase',
+                seedPhrase: wallet.mnemonic.phrase,
+            })
 
             const keyId = await processKey(wallet.privateKey);
 
