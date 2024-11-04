@@ -102,43 +102,21 @@ class KMSEthereumSigner extends ethers.Signer {
 
         // Convert DER signature to R,S format
         const signatureBuffer = Buffer.from(Signature);
-
-        // Parse DER format
-        let pos = 2; // Skip 0x30 and total length
-
-        // Get r
-        const rLength = signatureBuffer[pos + 1];
+        let pos = 2;
         pos += 2;
-        let r = signatureBuffer.slice(pos, pos + rLength);
-        if (r[0] === 0) {
-            r = r.slice(1);
-        }
+        const rLength = signatureBuffer[pos - 1];
+        const r = hexlify(signatureBuffer.slice(pos, pos + rLength));
         pos += rLength;
-
-        // Get s
-        const sLength = signatureBuffer[pos + 1];
         pos += 2;
-        let s = signatureBuffer.slice(pos, pos + sLength);
-        if (s[0] === 0) {
-            s = s.slice(1);
-        }
+        const sLength = signatureBuffer[pos - 1];
+        const s = hexlify(signatureBuffer.slice(pos, pos + sLength));
 
-        // Convert to hex strings and pad
-        const rHex = hexZeroPad(hexlify(r), 32);
-        const sHex = hexZeroPad(hexlify(s), 32);
-
-        // Try both recovery parameters to find the correct one
-        for (let recoveryParam = 0; recoveryParam < 2; recoveryParam++) {
-            const sig = splitSignature({
-                recoveryParam,
-                r: rHex,
-                s: sHex
-            });
-
+        // Try recovery values
+        for (let v = 27; v <= 28; v++) {
             try {
-                const recovered = ethers.utils.recoverAddress(digest, sig);
+                const recovered = ethers.utils.recoverAddress(digest, { r, s, v });
                 if (recovered.toLowerCase() === (await this.getAddress()).toLowerCase()) {
-                    return sig;
+                    return ethers.utils.joinSignature({ r, s, v });
                 }
             } catch (err) {
                 continue;
