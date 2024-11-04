@@ -8,12 +8,29 @@ const SECP256K1_N = ethers.BigNumber.from('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAA
 const SECP256K1_N_DIV_2 = SECP256K1_N.div(2);
 
 class KMSEthereumSigner extends ethers.Signer {
+
     constructor(keyId, region, provider) {
         super();
         this.keyId = keyId;
         this.kms = new KMS({ region });
-        this.provider = provider;
+        this._provider = provider;  // Use _provider instead of provider
         this._address = null;
+    }
+
+    get provider() {
+        if (!this._provider) {
+            throw new Error('No provider set');
+        }
+        return this._provider;
+    }
+
+    set provider(value) {
+        this._provider = value;
+    }
+
+    async getChainId() {
+        const network = await this.provider.getNetwork();
+        return network.chainId;
     }
 
     async getAddress() {
