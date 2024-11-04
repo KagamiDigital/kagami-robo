@@ -99,17 +99,28 @@ async function convertToPkcs8Der(ecKey) {
     ], pemResult);
 }
 
-async function encryptWithKmsPublicKey(derKey, wrappingPublicKey) {
-    const wrappingKeyBuffer = Buffer.from(wrappingPublicKey, 'base64');
+function encryptWithKmsPublicKey(ecPrivateKeyDer, wrappingPublicKeyBase64) {
+    // Decode KMS public key from base64
+    const wrappingPublicKey = Buffer.from(wrappingPublicKeyBase64, 'base64');
 
-    return runOpenSSLCommand([
-        'pkeyutl',
-        '-encrypt',
-        '-pubin',
-        '-keyform', 'DER',
-        '-pkeyopt', 'rsa_padding_mode:oaep',
-        '-pkeyopt', 'rsa_oaep_md:sha256'
-    ], derKey, wrappingKeyBuffer);
+    // Create public key object for encryption
+    const publicKeyObject = crypto.createPublicKey({
+        key: wrappingPublicKey,
+        format: 'der',
+        type: 'spki'
+    });
+
+    // Encrypt the DER-formatted private key using RSA-OAEP with SHA-256
+    const encryptedData = crypto.publicEncrypt(
+        {
+            key: publicKeyObject,
+            padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+            oaepHash: 'sha256'
+        },
+        ecPrivateKeyDer  // The DER-formatted EC private key
+    );
+
+    return encryptedData;
 }
 
 // Part 2: KMS Workflows
@@ -180,7 +191,7 @@ async function processKey(privateKeyHex) {
         const derKey = await convertToPkcs8Der(ecKey);
 
         // Encrypt with KMS wrapping key
-        const encryptedKeyMaterial = await encryptWithKmsPublicKey(derKey, publicKey);
+        const encryptedKeyMaterial = encryptWithKmsPublicKey(derKey, publicKey);
 
         // Import to KMS
         await importKeyMaterial(keyId, encryptedKeyMaterial, importToken);
