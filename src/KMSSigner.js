@@ -1,5 +1,9 @@
-class KMSSigner {
+const { ethers } = require('ethers');
+
+class KMSSigner extends ethers.Signer {
+
     constructor(_keyId, _wrappedSigner, _ethersProvider) {
+        super();
     	this.keyId = _keyId
     	this.wrappedSigner = _wrappedSigner
     	this.provider = _ethersProvider
@@ -54,6 +58,6 @@ class KMSSigner {
     	return this.wrappedSigner({keyId: this.keyId}, message)
     }
 
-}}
+}
 
 module.exports = KMSSigner;
