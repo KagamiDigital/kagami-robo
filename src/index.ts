@@ -30,23 +30,35 @@ import { getRPCNodeFromNetworkId } from "./utils";
   const wallets = new KMSWallets(provider)
   const chainId = process.env.ORCHESTRATION_NODE_CHAIN_ID
 
-  const wrappedSigner = new Signer(wallets, chainId)
+  try {
+    const wrappedSigner = new Signer(wallets, parseInt(chainId))
 
-  process.env.KMS_KEY_IDS!.split(",").forEach(async (keyId, i) => {
-    const signer = new KMSSigner(
-        keyId,
-        this.wrappedSigner,
-        provider
-    );
+    if (!wrappedSigner) {
+      logger.info("wallets", wallets)
+      throw new Error('Failed to create new Signer')
+    }
 
-    // const wallet = new ethers.Wallet(privateKey);
-    // const signer = wallet.connect(provider);
-    const publicAddress = await signer.getAddress();
-    signers[publicAddress] = signer;
-    console.log(`Signer ${i + 1}`, publicAddress);
+    process.env.KMS_KEY_IDS!.split(",").forEach(async (keyId, i) => {
+      const signer = new KMSSigner(
+          keyId,
+          wrappedSigner,
+          provider
+      );
 
-    logger.info(`Signer ${i + 1}`, publicAddress)
-  });
+      // const wallet = new ethers.Wallet(privateKey);
+      // const signer = wallet.connect(provider);
+      const publicAddress = await signer.getAddress();
+      signers[publicAddress] = signer;
+      console.log(`Signer ${i + 1}`, publicAddress);
+
+      logger.info(`Signer ${i + 1}`, publicAddress)
+    });
+  } catch (err) {
+    console.log(err)
+    logger.error(err)
+  }
+
+
 })();
 
 console.log("Attempting socket on ", process.env.API_URL)
