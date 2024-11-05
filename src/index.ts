@@ -12,8 +12,7 @@ import { KMSProviderAWS } from "@web3-kms-signer/kms-provider-aws";
 import { KMSWallets } from "@web3-kms-signer/kms-wallets";
 import { Signer } from "@web3-kms-signer/core";
 
-const provider = new KMSProviderAWS({region: process.env.AWS_REGION})
-const wallets = new KMSWallets(provider)
+const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true});
 import KMSSigner from "./KMSSigner"
 
 import {
@@ -29,6 +28,8 @@ import { getRPCNodeFromNetworkId } from "./utils";
 
 (async () => {
   const chainId = process.env.ORCHESTRATION_NODE_CHAIN_ID
+  const kmsProvider = new KMSProviderAWS({region: process.env.AWS_REGION})
+  const wallets = new KMSWallets(kmsProvider)
 
   try {
     const wrappedSigner = new Signer(wallets, parseInt(chainId))
@@ -42,7 +43,7 @@ import { getRPCNodeFromNetworkId } from "./utils";
       const signer = new KMSSigner(
           keyId,
           wrappedSigner,
-          provider
+          provider,
       );
 
       // const wallet = new ethers.Wallet(privateKey);

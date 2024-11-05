@@ -1,8 +1,8 @@
 class KMSSigner {
-    constructor(_keyId, _wrappedSigner, _provider) {
+    constructor(_keyId, _wrappedSigner, _ethersProvider) {
     	this.keyId = _keyId
     	this.wrappedSigner = _wrappedSigner
-    	this.provider = _provider
+    	this.provider = _ethersProvider
     }
 
     async getChainId() {
