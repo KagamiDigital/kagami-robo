@@ -54,4 +54,6 @@ class KMSSigner {
     	return this.wrappedSigner({keyId: this.keyId}, message)
     }
 
-}
+}}
+
+module.exports = KMSSigner;
