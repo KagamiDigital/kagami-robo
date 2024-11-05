@@ -7,6 +7,14 @@ class KMSSigner extends ethers.Signer {
     	this.keyId = _keyId
     	this.wrappedSigner = _wrappedSigner
     	this.provider = _ethersProvider
+        this._address = null;
+    }
+
+    get address() {
+        if (!this._address) {
+            throw new Error('No address set');
+        }
+        return this._address;
     }
 
     async getChainId() {
@@ -39,7 +47,11 @@ class KMSSigner extends ethers.Signer {
     }
 
 	async getAddress() {
-		return this.wrappedSigner.wallets.getAddressHex(this.keyId)
+        if (this._address) return this._address;
+
+		this._address = this.wrappedSigner.wallets.getAddressHex(this.keyId)
+
+		return this._address
     }
 
     async getAddressHex() {
