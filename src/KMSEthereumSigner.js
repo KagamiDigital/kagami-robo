@@ -28,9 +28,32 @@ class KMSEthereumSigner extends ethers.Signer {
         this._provider = value;
     }
 
+    get address() {
+        if (!this._address) {
+            throw new Error('No address set');
+        }
+        return this._address;
+    }
+
     async getChainId() {
         const network = await this.provider.getNetwork();
         return network.chainId;
+    }
+
+    // Add signing key interface
+    _signingKey() {
+        // This is just a placeholder to match the Wallet interface
+        return {
+            signDigest: async (digest) => {
+                return this.signDigest(digest);
+            }
+        };
+    }
+
+    // Add mnemonic interface
+    _mnemonic() {
+        // KMS doesn't use mnemonics, but we should match the interface
+        return null;
     }
 
     async getAddress() {
@@ -81,11 +104,12 @@ class KMSEthereumSigner extends ethers.Signer {
 
         // Handle both EIP-1559 and legacy transactions
         const baseTx = {
-            chainId: tx.chainId || (await this.provider.getNetwork()).chainId,
+            chainId: tx.chainId || await this.getChainId(),
             data: tx.data || "",
             to: tx.to || undefined,
             nonce: tx.nonce ? tx.nonce : await this.provider.getTransactionCount(await this.getAddress()),
             value: tx.value || 0,
+            type: tx.type || 0,  // Explicitly set transaction type
         };
 
         // EIP-1559 transaction
@@ -93,12 +117,12 @@ class KMSEthereumSigner extends ethers.Signer {
             baseTx.type = 2;
             baseTx.maxPriorityFeePerGas = tx.maxPriorityFeePerGas || tx.maxFeePerGas || 0;
             baseTx.maxFeePerGas = tx.maxFeePerGas || tx.maxPriorityFeePerGas || 0;
-            baseTx.gasLimit = tx.gasLimit || undefined;
+            baseTx.gasLimit = tx.gasLimit || await this.provider.estimateGas(tx);
         }
         // Legacy transaction
         else {
-            baseTx.gasPrice = tx.gasPrice || undefined;
-            baseTx.gasLimit = tx.gasLimit || undefined;
+            baseTx.gasPrice = tx.gasPrice || await this.provider.getGasPrice();
+            baseTx.gasLimit = tx.gasLimit || await this.provider.estimateGas(tx);
         }
 
         const unsignedTx = ethers.utils.serializeTransaction(baseTx);
