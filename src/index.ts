@@ -46,6 +46,8 @@ import { getRPCNodeFromNetworkId } from "./utils";
           provider,
       );
 
+      console.log('signer ', signer)
+
       // const wallet = new ethers.Wallet(privateKey);
       // const signer = wallet.connect(provider);
       const publicAddress = await signer.getAddress();
