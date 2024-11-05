@@ -12,9 +12,6 @@
   "dependencies": {
     "@aws-sdk/client-kms": "^3.485.0",
     "@intuweb3/exp-node": "^0.99.886",
-    "@web3-kms-signer/core": "^1.0.16",
-    "@web3-kms-signer/kms-provider-aws": "^1.0.6",
-    "@web3-kms-signer/kms-wallets": "^1.0.6",
     "assert-browserify": "^2.0.0",
     "buffer-browserify": "^0.2.5",
     "bufferutil": "^4.0.8",
