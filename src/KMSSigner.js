@@ -39,7 +39,7 @@ class KMSSigner extends ethers.Signer {
     }
 
 	async getAddress() {
-		return this.wrappedSigner.wallets.getAddress(this.keyId)
+		return this.wrappedSigner.wallets.getAddressHex(this.keyId)
     }
 
     async getAddressHex() {
