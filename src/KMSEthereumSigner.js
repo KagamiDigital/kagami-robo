@@ -3,7 +3,7 @@ const { ethers } = require('ethers');
 const asn1 = require('asn1.js');
 const BN = require('bn.js');
 
-// Define ASN1 parsers
+/* ASN1 parsers */
 const EcdsaSigAsnParse = asn1.define('EcdsaSig', function() {
     this.seq().obj(
         this.key('r').int(),
@@ -21,15 +21,72 @@ const EcdsaPubKey = asn1.define('EcdsaPubKey', function() {
     );
 });
 
-// The order of the secp256k1 curve
-const SECP256K1_N = new BN('fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141', 16);
-const SECP256K1_N_DIV_2 = SECP256K1_N.div(new BN(2));
+async function sign(digest, kmsCredentials) {
+    const kms = new KMS(kmsCredentials);
+    const params = {
+        KeyId: kmsCredentials.keyId,
+        Message: digest,
+        SigningAlgorithm: 'ECDSA_SHA_256',
+        MessageType: 'DIGEST'
+    };
+    const res = await kms.sign(params);
+    return res;
+}
+
+async function getPublicKey(kmsCredentials) {
+    const kms = new KMS(kmsCredentials);
+    return kms.getPublicKey({
+        KeyId: kmsCredentials.keyId
+    });
+}
+
+function getEthereumAddress(publicKey) {
+    const res = EcdsaPubKey.decode(publicKey, 'der');
+    let pubKeyBuffer = res.pubKey.data;
+    pubKeyBuffer = pubKeyBuffer.slice(1, pubKeyBuffer.length);
+
+    const address = ethers.utils.keccak256(pubKeyBuffer);
+    const EthAddr = `0x${address.slice(-40)}`;
+    return EthAddr;
+}
+
+function findEthereumSig(signature) {
+    const decoded = EcdsaSigAsnParse.decode(signature, 'der');
+    const { r, s } = decoded;
+
+    const secp256k1N = new BN('fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141', 16);
+    const secp256k1halfN = secp256k1N.div(new BN(2));
+
+    return {
+        r,
+        s: s.gt(secp256k1halfN) ? secp256k1N.sub(s) : s
+    };
+}
+
+function recoverPubKeyFromSig(msg, r, s, v) {
+    return ethers.utils.recoverAddress(`0x${msg.toString('hex')}`, {
+        r: `0x${r.toString('hex')}`,
+        s: `0x${s.toString('hex')}`,
+        v
+    });
+}
+
+function determineCorrectV(msg, r, s, expectedEthAddr) {
+    let v = 27;
+    let pubKey = recoverPubKeyFromSig(msg, r, s, v);
+
+    if (pubKey.toLowerCase() !== expectedEthAddr.toLowerCase()) {
+        v = 28;
+        pubKey = recoverPubKeyFromSig(msg, r, s, v);
+    }
+
+    return { pubKey, v };
+}
 
 class KMSEthereumSigner extends ethers.Signer {
     constructor(keyId, region, provider) {
         super();
-        this.keyId = keyId;
-        this.kms = new KMS({ region });
+        this.kmsCredentials = { keyId, region };
         this._provider = provider;
         this._address = null;
     }
@@ -45,50 +102,36 @@ class KMSEthereumSigner extends ethers.Signer {
     async getAddress() {
         if (this._address) return this._address;
 
-        const { PublicKey } = await this.kms.getPublicKey({
-            KeyId: this.keyId
-        });
-
-        const publicKeyBuffer = Buffer.from(PublicKey);
-        const res = EcdsaPubKey.decode(publicKeyBuffer, 'der');
-        let pubKeyBuffer = res.pubKey.data;
-
-        // Remove the 0x04 prefix
-        pubKeyBuffer = pubKeyBuffer.slice(1);
-
-        // Compute Keccak-256 hash of the public key
-        const address = ethers.utils.keccak256(pubKeyBuffer);
-        // Take last 20 bytes as ethereum address
-        this._address = ethers.utils.getAddress(`0x${address.slice(-40)}`);
+        const publicKey = await getPublicKey(this.kmsCredentials);
+        const ethAddr = getEthereumAddress(Buffer.from(publicKey.PublicKey));
+        this._address = ethers.utils.getAddress(ethAddr);
         return this._address;
     }
 
     async signMessage(message) {
-        return this.signDigest(ethers.utils.hashMessage(message));
+        const messageHash = ethers.utils.hashMessage(message);
+        const signature = await this.signDigest(messageHash);
+        return signature;
     }
 
     async signTransaction(transaction) {
         const tx = await ethers.utils.resolveProperties(transaction);
 
-        // Handle both EIP-1559 and legacy transactions
         const baseTx = {
             chainId: tx.chainId || (await this.provider.getNetwork()).chainId,
             data: tx.data || "",
             to: tx.to || undefined,
-            nonce: tx.nonce ? tx.nonce : await this.provider.getTransactionCount(await this.getAddress()),
+            nonce: tx.nonce || await this.provider.getTransactionCount(await this.getAddress()),
             value: tx.value || 0,
             type: tx.type || 0
         };
 
-        // EIP-1559 transaction
         if (tx.type === 2 || tx.maxFeePerGas || tx.maxPriorityFeePerGas) {
             baseTx.type = 2;
             baseTx.maxPriorityFeePerGas = tx.maxPriorityFeePerGas || tx.maxFeePerGas || 0;
             baseTx.maxFeePerGas = tx.maxFeePerGas || tx.maxPriorityFeePerGas || 0;
             baseTx.gasLimit = tx.gasLimit || await this.provider.estimateGas(tx);
-        }
-        // Legacy transaction
-        else {
+        } else {
             baseTx.gasPrice = tx.gasPrice || await this.provider.getGasPrice();
             baseTx.gasLimit = tx.gasLimit || await this.provider.estimateGas(tx);
         }
@@ -100,52 +143,24 @@ class KMSEthereumSigner extends ethers.Signer {
 
     async signDigest(digestHex) {
         const digest = Buffer.from(ethers.utils.arrayify(digestHex));
+        const signature = await sign(digest, this.kmsCredentials);
 
-        const { Signature } = await this.kms.sign({
-            KeyId: this.keyId,
-            Message: digest,
-            MessageType: 'DIGEST',
-            SigningAlgorithm: 'ECDSA_SHA_256'
+        if (signature.$response?.error || !signature.Signature) {
+            throw new Error(`AWS KMS call failed with: ${signature.$response?.error}`);
+        }
+
+        const { r, s } = findEthereumSig(Buffer.from(signature.Signature));
+        const { v } = await determineCorrectV(digest, r, s, await this.getAddress());
+
+        return ethers.utils.joinSignature({
+            r: `0x${r.toString('hex')}`,
+            s: `0x${s.toString('hex')}`,
+            v
         });
-
-        // Parse the ASN1 signature
-        const decoded = EcdsaSigAsnParse.decode(Buffer.from(Signature), 'der');
-        let { r, s } = decoded;
-
-        // Convert BN to hex strings
-        r = `0x${r.toString('hex')}`;
-        s = `0x${s.toString('hex')}`;
-
-        // Handle s being on the upper half of the curve per EIP-2
-        let sigS = new BN(ethers.utils.arrayify(s));
-        if (sigS.gt(SECP256K1_N_DIV_2)) {
-            sigS = SECP256K1_N.sub(sigS);
-        }
-        s = `0x${sigS.toString('hex')}`;
-
-        // Ensure r and s are 32 bytes each
-        r = ethers.utils.hexZeroPad(r, 32);
-        s = ethers.utils.hexZeroPad(s, 32);
-
-        // Try recovery values
-        const address = await this.getAddress();
-
-        for (let v of [27, 28]) {
-            try {
-                const recovered = ethers.utils.recoverAddress(digestHex, { r, s, v });
-                if (recovered.toLowerCase() === address.toLowerCase()) {
-                    return ethers.utils.joinSignature({ r, s, v });
-                }
-            } catch (err) {
-                console.log(`Recovery attempt failed with v=${v}:`, err.message);
-            }
-        }
-
-        throw new Error('Failed to find correct recovery value');
     }
 
     connect(provider) {
-        return new KMSEthereumSigner(this.keyId, this.region, provider);
+        return new KMSEthereumSigner(this.kmsCredentials.keyId, this.kmsCredentials.region, provider);
     }
 
     async _signTypedData(domain, types, value) {
