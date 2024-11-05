@@ -4,10 +4,15 @@ import {io} from 'socket.io-client'
 dotenv.config();
 
 import { ethers } from "ethers";
-const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true});
 const signers: { [index: string]: ethers.Wallet } = {};
 
 import KMSEthereumSigner from "./KMSEthereumSigner"
+
+import { KMSProviderAWS } from "@web3-kms-signer/kms-provider-aws";
+import { KMSWallets } from "@web3-kms-signer/kms-wallets";
+import { Signer } from "@web3-kms-signer/core";
+
+import KMSSigner from "./KMSSigner"
 
 import {
   preRegistration,
@@ -21,12 +26,16 @@ import {
 import { getRPCNodeFromNetworkId } from "./utils";
 
 (async () => {
+  const provider = new KMSProviderAWS({region: process.env.AWS_REGION})
+  const wallets = new KMSWallets(provider)
+  const chainId = process.env.ORCHESTRATION_NODE_CHAIN_ID
 
+  const wrappedSigner = new Signer(wallets, chainId)
 
   process.env.KMS_KEY_IDS!.split(",").forEach(async (keyId, i) => {
-    const signer = new KMSEthereumSigner(
+    const signer = new KMSSigner(
         keyId,
-        process.env.AWS_REGION,
+        this.wrappedSigner,
         provider
     );
 
