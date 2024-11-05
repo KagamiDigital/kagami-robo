@@ -12,6 +12,8 @@ import { KMSProviderAWS } from "@web3-kms-signer/kms-provider-aws";
 import { KMSWallets } from "@web3-kms-signer/kms-wallets";
 import { Signer } from "@web3-kms-signer/core";
 
+const provider = new KMSProviderAWS({region: process.env.AWS_REGION})
+const wallets = new KMSWallets(provider)
 import KMSSigner from "./KMSSigner"
 
 import {
@@ -26,8 +28,6 @@ import {
 import { getRPCNodeFromNetworkId } from "./utils";
 
 (async () => {
-  const provider = new KMSProviderAWS({region: process.env.AWS_REGION})
-  const wallets = new KMSWallets(provider)
   const chainId = process.env.ORCHESTRATION_NODE_CHAIN_ID
 
   try {
