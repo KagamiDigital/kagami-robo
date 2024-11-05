@@ -4,16 +4,10 @@ import {io} from 'socket.io-client'
 dotenv.config();
 
 import { ethers } from "ethers";
+const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true});
 const signers: { [index: string]: ethers.Wallet } = {};
 
 import KMSEthereumSigner from "./KMSEthereumSigner"
-
-import { KMSProviderAWS } from "@web3-kms-signer/kms-provider-aws";
-import { KMSWallets } from "@web3-kms-signer/kms-wallets";
-import { Signer } from "@web3-kms-signer/core";
-
-const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true});
-import KMSSigner from "./KMSSigner"
 
 import {
   preRegistration,
@@ -27,41 +21,23 @@ import {
 import { getRPCNodeFromNetworkId } from "./utils";
 
 (async () => {
-  const chainId = process.env.ORCHESTRATION_NODE_CHAIN_ID
-  const kmsProvider = new KMSProviderAWS({region: process.env.AWS_REGION})
-  const wallets = new KMSWallets(kmsProvider)
-
-  try {
-    const wrappedSigner = new Signer(wallets, parseInt(chainId))
-
-    if (!wrappedSigner) {
-      logger.info("wallets", wallets)
-      throw new Error('Failed to create new Signer')
-    }
-
-    process.env.KMS_KEY_IDS!.split(",").forEach(async (keyId, i) => {
-      const signer = new KMSSigner(
-          keyId,
-          wrappedSigner,
-          provider,
-      );
-
-      console.log('signer ', signer)
-
-      // const wallet = new ethers.Wallet(privateKey);
-      // const signer = wallet.connect(provider);
-      const publicAddress = await signer.getAddress();
-      signers[publicAddress] = signer;
-      console.log(`Signer ${i + 1}`, publicAddress);
-
-      logger.info(`Signer ${i + 1}`, publicAddress)
-    });
-  } catch (err) {
-    console.log(err)
-    logger.error(err)
-  }
 
 
+  process.env.KMS_KEY_IDS!.split(",").forEach(async (keyId, i) => {
+    const signer = new KMSEthereumSigner(
+        keyId,
+        process.env.AWS_REGION,
+        provider
+    );
+
+    // const wallet = new ethers.Wallet(privateKey);
+    // const signer = wallet.connect(provider);
+    const publicAddress = await signer.getAddress();
+    signers[publicAddress] = signer;
+    console.log(`Signer ${i + 1}`, publicAddress);
+
+    logger.info(`Signer ${i + 1}`, publicAddress)
+  });
 })();
 
 console.log("Attempting socket on ", process.env.API_URL)
