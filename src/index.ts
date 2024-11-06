@@ -178,7 +178,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
   try {
     _sendLogToClient(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
     
-    const res = await automateRegistration(accountAddress, signers[signer])
+    const res = await automateRegistration(accountAddress, signer, signers[signer])
     
     _sendLogToClient(`SaltRobos: register:automateRegistration:success:${signer} => response`, {res}, responsePayload)
 
