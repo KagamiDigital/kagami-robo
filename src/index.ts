@@ -151,9 +151,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
 
     if(userRegistrations.length > 0) { // robo has already registerd, redundant request
 
-      const userRegistration = userRegistrations.find(r => r.user === signer)
-      
-      _sendLogToClient(`SaltRobos: register:event:getRegistrationStatus:success:${signer}`, userRegistration.registered, responsePayload);
+      _sendLogToClient(`SaltRobos: register:event:getRegistrationStatus:success:${signer}`, {userRegistrations, provider}, responsePayload);
    
       socket.emit("registrationComplete", {
         ...responsePayload,
