@@ -6,6 +6,7 @@ dotenv.config();
 import { ethers } from "ethers";
 const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true});
 const signers: { [index: string]: ethers.Wallet } = {};
+const signersCompare: { [index: string]: ethers.Wallet } = {};
 
 import KMSEthereumSigner from "./KMSEthereumSigner"
 
@@ -22,6 +23,18 @@ import { getRPCNodeFromNetworkId } from "./utils";
 
 (async () => {
 
+  // todo:
+  // create 2 signers so I can compare their signatures
+  // we'll use the working signer so we can check our KMS Signer at each step
+  process.env.KEYS!.split(",").forEach(async (privateKey, i) => {
+    const wallet = new ethers.Wallet(privateKey);
+    const signer = wallet.connect(provider);
+    const publicAddress = await signer.getAddress();
+    signers[publicAddress] = signer;
+    console.log(`Signer ${i + 1}`, publicAddress);
+
+    logger.info(`Signer ${i + 1}`, publicAddress)
+  });
 
   process.env.KMS_KEY_IDS!.split(",").forEach(async (keyId, i) => {
     const signer = new KMSEthereumSigner(
@@ -33,7 +46,10 @@ import { getRPCNodeFromNetworkId } from "./utils";
     // const wallet = new ethers.Wallet(privateKey);
     // const signer = wallet.connect(provider);
     const publicAddress = await signer.getAddress();
-    signers[publicAddress] = signer;
+    console.log('public key', publicAddress)
+    console.log('keyId', keyId)
+
+    signersCompare[publicAddress] = signer;
     console.log(`Signer ${i + 1}`, publicAddress);
 
     logger.info(`Signer ${i + 1}`, publicAddress)
@@ -107,7 +123,7 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
   try {
 
     _sendLogToClient(`SaltRobos: pre-registration:start:${signer} => expect success or failure`, {}, responsePayload)
-    const tx = await preRegistration(accountAddress, signers[signer]) as ethers.ContractTransaction
+    const tx = await preRegistration(accountAddress, signers[signer], signersCompare[signer]) as ethers.ContractTransaction
     const res = await tx.wait();
 
     _sendLogToClient(`SaltRobos: pre-registration:success:${signer} => response`, {res}, responsePayload)
@@ -183,7 +199,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
   try {
     _sendLogToClient(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
     
-    const res = await automateRegistration(accountAddress, signers[signer])
+    const res = await automateRegistration(accountAddress, signers[signer], signersCompare[signer])
     
     _sendLogToClient(`SaltRobos: register:automateRegistration:success:${signer} => response`, {res}, responsePayload)
 
@@ -204,7 +220,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
 
   try {
     _sendLogToClient(`SaltRobos: register:registerAllSteps:start:${signer} => expect success or failure`, {}, responsePayload)
-    const tx = await registerAllSteps(accountAddress, signers[signer]) as ethers.ContractTransaction
+    const tx = await registerAllSteps(accountAddress, signers[signer], signersCompare[signer]) as ethers.ContractTransaction
     const res = await tx.wait()
 
     _sendLogToClient(`SaltRobos: register:registerAllSteps:success:${signer} => response`, {res}, responsePayload)
@@ -241,7 +257,7 @@ socket.on(
     try {
       _sendLogToClient(`SaltRobos: proposeTransaction:signTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
-      const tx = await signTx(accountAddress, Number(txId), signers[signer]) as ethers.ContractTransaction
+      const tx = await signTx(accountAddress, Number(txId), signers[signer], signersCompare[signer]) as ethers.ContractTransaction
       const res = await tx.wait()
 
       _sendLogToClient(`SaltRobos: proposeTransaction:signTx:success:${signer} => response`, {res}, responsePayload)
@@ -299,7 +315,7 @@ socket.on(
     try {
       _sendLogToClient(`SaltRobos: broadcastTransaction:combineTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
-      combineResponse = await combineSignedTx(accountAddress, Number(txId), signers[signer]);
+      combineResponse = await combineSignedTx(accountAddress, Number(txId), signers[signer], signersCompare[signer]);
       _sendLogToClient(`SaltRobos: broadcastTransaction:combineTx:success:${signer} => response`, {combineResponse}, responsePayload)
 
       socket.emit("transactionCombiningComplete", {
