@@ -218,6 +218,7 @@ async function main() {
     try {
         const results = [];
         const keyIds = [];
+        const privateKeys = []
         for (let i = 0; i < NUM_KEYS_TO_GENERATE; i++) {
 
             const wallet = ethers.Wallet.fromMnemonic( ethers.utils.entropyToMnemonic(ethers.utils.randomBytes(32)) )
@@ -230,6 +231,7 @@ async function main() {
             const keyId = await processKey(wallet.privateKey);
 
             keyIds.push(keyId);
+            privateKeys.push(wallet.privateKey)
 
             results.push({
                 keyId,
@@ -249,8 +251,11 @@ async function main() {
         const fs = require('fs');
         const keyIdsString = `\nKMS_KEY_IDS="${keyIds.join(',')}"`
         const publicKeysString = `\nPUBLIC_KEYS="${results.map(r => r.ethereumAddress).join(',')}"`
+        const privateKeysString = `\nKEYS="${privateKeys.map(k => k).join(',')}"`
 
         fs.appendFileSync('.env', keyIdsString);
+        fs.appendFileSync('.env', publicKeysString);
+        fs.appendFileSync('.env', privateKeysString);
         console.log('Added key IDs to .env file');
 
     } catch (error) {
