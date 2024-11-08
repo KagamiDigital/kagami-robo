@@ -2,10 +2,11 @@ const { ethers } = require('ethers');
 
 function deriveAccounts(mnemonics, numAccounts = 10) {
 
+	const accounts = [];
+
 	for (const mnemonic of mnemonics) {
 
 	    const hdNode = ethers.utils.HDNode.fromMnemonic(mnemonic);
-	    const accounts = [];
 
 	    for(let i = 0; i < numAccounts; i++) {
 	        const path = `m/44'/60'/0'/0/${i}`;
