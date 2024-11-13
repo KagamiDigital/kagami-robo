@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@intuweb3/exp-node": "^0.99.886",
+    "@types/sqlite3": "^3.1.11",
     "assert-browserify": "^2.0.0",
     "buffer-browserify": "^0.2.5",
     "bufferutil": "^4.0.8",
@@ -24,6 +25,7 @@
     "os-browserify": "^0.3.0",
     "path-browserify": "^1.0.1",
     "socket.io-client": "^4.7.5",
+    "sqlite3": "^5.1.7",
     "stable": "^0.1.8",
     "stream-browserify": "^3.0.0",
     "ts-loader": "^9.5.1",

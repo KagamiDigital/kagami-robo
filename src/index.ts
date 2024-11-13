@@ -5,7 +5,13 @@ dotenv.config();
 
 import { ethers } from "ethers";
 const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true});
-const signers: { [index: string]: ethers.Wallet } = {};
+const signers: { [index: string]: ethers.Wallet } = {}; 
+
+( () => {
+  console.log('running db script'); 
+  dbScript(); 
+  getTransactionsForAccount('0x3810Da7C7Bf640368ee13544754e68d6F8c0a24F'); 
+})(); 
 
 import {
   preRegistration,
@@ -17,6 +23,7 @@ import {
   getUserPreRegisterInfos,
 } from "@intuweb3/exp-node";
 import { getRPCNodeFromNetworkId } from "./utils";
+import { addTransaction, dbScript, getTransactionsForAccount, updateTxHash } from "./database";
 
 (async () => {
   process.env.KEYS!.split(",").forEach(async (privateKey, i) => {
@@ -53,6 +60,46 @@ socket.on("connect_error", (err:any) => {
   logger.error("Log:Error: Error connect_error connecting to API Socket Stream", err)
 });
 
+socket.on("getAccountTransactions", async (data: {signer:string, accountAddress: string }) => {
+
+  const { accountAddress, signer } = data;
+  let transactions = []
+  const responsePayload = { accountAddress, transactions };
+
+  _sendLogToClient(`SaltRobos: accountTransactions:${signer} => Event Received From API`, {}, responsePayload)
+
+  
+  try {
+
+    _sendLogToClient(`SaltRobos: accountTransactions:start:${signer} => expect success or failure`, {}, responsePayload)
+    
+    transactions = getTransactionsForAccount(accountAddress);  
+
+    _sendLogToClient(`SaltRobos: accountTransactions:success:${signer}`,{}, responsePayload)
+    
+      socket.emit("accountTransactions", {
+        ...responsePayload,
+        success: true,
+        error: null,
+      });
+
+      return; 
+  } catch(error) {
+
+    _sendLogToClient(`SaltRobos:Error: getAccountTransactions:failure:${signer} => error`, {error}, responsePayload)
+
+    logger.error(`Log:Error: Error: getAccountTransactions:failure:${signer}`, error)
+
+    socket.emit("accountTransactionsComplete", {
+      ...responsePayload,
+      success: false,
+      error,
+    });
+
+    return; 
+  }
+}); 
+  
 socket.on("preRegister", async (data: { signer: string; accountAddress: string }) => {
 
   const { accountAddress, signer } = data;
@@ -315,7 +362,11 @@ socket.on(
 
       const txReceipt= await txResponse.wait(); 
 
-      responsePayload.txReceipt = txReceipt; 
+      responsePayload.txReceipt = txReceipt;
+
+      // add the transaction to the db
+      addTransaction(accountAddress,txId, networkId,''); 
+ 
 
       _sendLogToClient(`SaltRobos: broadcastTransaction:sendTx:success:${signer} => response`, {}, { responsePayload,txReceipt })
 
