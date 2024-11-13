@@ -10,7 +10,6 @@ const signers: { [index: string]: ethers.Wallet } = {};
 ( () => {
   console.log('running db script'); 
   dbScript(); 
-  getTransactionsForAccount('0x3810Da7C7Bf640368ee13544754e68d6F8c0a24F'); 
 })(); 
 
 import {
