@@ -168,7 +168,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
   try {
     _sendLogToClient(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
     
-    const res = await automateRegistration(accountAddress, signers[signer])
+    const res = await automateRegistration(accountAddress, signers[signer],undefined,'wss://relay.nostrdice.com',undefined); 
     
     _sendLogToClient(`SaltRobos: register:automateRegistration:success:${signer} => response`, {res}, responsePayload)
 
@@ -189,7 +189,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
 
   try {
     _sendLogToClient(`SaltRobos: register:registerAllSteps:start:${signer} => expect success or failure`, {}, responsePayload)
-    const tx = await registerAllSteps(accountAddress, signers[signer]) as ethers.ContractTransaction
+    const tx = await registerAllSteps(accountAddress, signers[signer],undefined,'wss://relay.nostrdice.com',undefined) as ethers.ContractTransaction
     const res = await tx.wait()
 
     _sendLogToClient(`SaltRobos: register:registerAllSteps:success:${signer} => response`, {res}, responsePayload)
