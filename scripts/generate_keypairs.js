@@ -360,6 +360,17 @@ async function main() {
                 const publicKeysString = `\nPUBLIC_KEYS="${results.map(r => r.ethereumAddress).join(',')}"`
                 const privateKeysString = `\nKEYS="${privateKeys.join(',')}"`
 
+                let importKeys = {}
+
+                for (let i = 0; i < results.length; i++) {
+                    const publicKey = results[i]
+                    const privateKey = privateKeys[i]
+
+                    importKeys[publicKey] = privateKey
+                }
+
+                const importString = JSON.stringify(importKeys)
+
                 fs.appendFileSync('.env', keyIdsString);
                 const timestamp = new Date().toISOString();
                 fs.appendFileSync('.env', "\n\n");
@@ -367,6 +378,7 @@ async function main() {
                 fs.appendFileSync('.env', `# Keys GENERATED at ${timestamp}`);
                 fs.appendFileSync('.env', publicKeysString);
                 fs.appendFileSync('.env', privateKeysString);
+                fs.appendFileSync('.env', `${importString}`);
                 fs.appendFileSync('.env', "\n");
                 fs.appendFileSync('.env', "# ===== END ===== #");
 
