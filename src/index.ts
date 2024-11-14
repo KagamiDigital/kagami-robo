@@ -135,27 +135,22 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
 
     _sendLogToClient(`SaltRobos: register:event:getRegistrationStatus:start:${signer} => expect success or failure`, {}, responsePayload);
    
-    const userRegistrations = await getUserRegistrationAllInfos(
+    const res = await getUserRegistrationAllInfos(
       accountAddress,
+      signer,
       provider,
     );
 
-    if(userRegistrations.length > 0) { // robo has already registerd, redundant request
+    if(res.registered) { // robo has already registerd, redundant request
 
-      const userRegistration = userRegistrations.find(r => r.user === signer)
+      _sendLogToClient(`SaltRobos: register:event:getRegistrationStatus:success:${signer}`, res.registered, responsePayload);
 
-      _sendLogToClient(`SaltRobos: register:event:getRegistrationStatus:success:${signer}`, {userRegistrations, provider}, responsePayload);
-
-      if (userRegistration.registered) {
-        socket.emit("registrationComplete", {
-          ...responsePayload,
-          success: true,
-          error: null,
-        });
-
-        // already registered, so no need to continue with automateRegistration below
-        return;
-      }
+      socket.emit("registrationComplete", {
+        ...responsePayload,
+        success: true,
+        error: null,
+      });
+      return;
     }
   } catch(error) {
 
