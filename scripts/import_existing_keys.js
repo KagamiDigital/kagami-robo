@@ -157,7 +157,8 @@ async function createKmsKey() {
 async function getImportParameters(keyId) {
     const command = new GetParametersForImportCommand({
         KeyId: keyId,
-        WrappingAlgorithm: 'RSAES_OAEP_SHA_256',
+        WrappingAlgorithm: 'RSA_AES_KEY_WRAP_SHA_256',
+        // WrappingAlgorithm: 'RSAES_OAEP_SHA_256',
         WrappingKeySpec: 'RSA_2048'
     });
 
@@ -165,7 +166,8 @@ async function getImportParameters(keyId) {
     await logOperation({
         event: 'import_parameters_received',
         keyId,
-        wrappingAlgorithm: 'RSAES_OAEP_SHA_256'
+        WrappingAlgorithm: 'RSA_AES_KEY_WRAP_SHA_256',
+        // wrappingAlgorithm: 'RSAES_OAEP_SHA_256'
     });
 
     return {
