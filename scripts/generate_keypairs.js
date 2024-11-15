@@ -378,8 +378,8 @@ async function main() {
                 fs.appendFileSync('.env', `# Keys GENERATED at ${timestamp}`);
                 fs.appendFileSync('.env', publicKeysString);
                 fs.appendFileSync('.env', privateKeysString);
-                fs.appendFileSync('.env', `${importString}`);
                 fs.appendFileSync('.env', "\n");
+                fs.appendFileSync('.env', `IMPORT_KEYS=\`${importString}\`\n`);
                 fs.appendFileSync('.env', "# ===== END ===== #");
 
                 console.log('Added key IDs to .env file');
