@@ -1,32 +1,12 @@
 const { KMS } = require('@aws-sdk/client-kms');
 const { ethers } = require('ethers');
-const asn1 = require('asn1.js');
-const BN = require('bn.js');
-
-/* ASN1 parsers */
-const EcdsaSigAsnParse = asn1.define('EcdsaSig', function() {
-    this.seq().obj(
-        this.key('r').int(),
-        this.key('s').int()
-    );
-});
-
-const EcdsaPubKey = asn1.define('EcdsaPubKey', function() {
-    this.seq().obj(
-        this.key('algo').seq().obj(
-            this.key('a').objid(),
-            this.key('b').objid()
-        ),
-        this.key('pubKey').bitstr()
-    );
-});
 
 async function sign(digest, kmsCredentials) {
     const kms = new KMS(kmsCredentials);
     const params = {
         KeyId: kmsCredentials.keyId,
         Message: digest,
-        SigningAlgorithm: 'ECDSA_SHA_256',
+        SigningAlgorithm: 'RSASSA_PKCS1_V1_5_SHA_256',
         MessageType: 'DIGEST'
     };
     const res = await kms.sign(params);
@@ -38,49 +18,6 @@ async function getPublicKey(kmsCredentials) {
     return kms.getPublicKey({
         KeyId: kmsCredentials.keyId
     });
-}
-
-function getEthereumAddress(publicKey) {
-    const res = EcdsaPubKey.decode(publicKey, 'der');
-    let pubKeyBuffer = res.pubKey.data;
-    pubKeyBuffer = pubKeyBuffer.slice(1, pubKeyBuffer.length);
-
-    const address = ethers.utils.keccak256(pubKeyBuffer);
-    const EthAddr = `0x${address.slice(-40)}`;
-    return EthAddr;
-}
-
-function findEthereumSig(signature) {
-    const decoded = EcdsaSigAsnParse.decode(signature, 'der');
-    const { r, s } = decoded;
-
-    const secp256k1N = new BN('fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141', 16);
-    const secp256k1halfN = secp256k1N.div(new BN(2));
-
-    return {
-        r,
-        s: s.gt(secp256k1halfN) ? secp256k1N.sub(s) : s
-    };
-}
-
-function recoverPubKeyFromSig(msg, r, s, v) {
-    return ethers.utils.recoverAddress(`0x${msg.toString('hex')}`, {
-        r: `0x${r.toString('hex')}`,
-        s: `0x${s.toString('hex')}`,
-        v
-    });
-}
-
-function determineCorrectV(msg, r, s, expectedEthAddr) {
-    let v = 27;
-    let pubKey = recoverPubKeyFromSig(msg, r, s, v);
-
-    if (pubKey.toLowerCase() !== expectedEthAddr.toLowerCase()) {
-        v = 28;
-        pubKey = recoverPubKeyFromSig(msg, r, s, v);
-    }
-
-    return { pubKey, v };
 }
 
 class KMSEthereumSigner extends ethers.Signer {
@@ -101,10 +38,10 @@ class KMSEthereumSigner extends ethers.Signer {
 
     async getAddress() {
         if (this._address) return this._address;
-
         const publicKey = await getPublicKey(this.kmsCredentials);
-        const ethAddr = getEthereumAddress(Buffer.from(publicKey.PublicKey));
-        this._address = ethers.utils.getAddress(ethAddr);
+        // Hash the RSA public key to create Ethereum address
+        const pubKeyHash = ethers.utils.keccak256(publicKey.PublicKey);
+        this._address = ethers.utils.getAddress('0x' + pubKeyHash.slice(-40));
         return this._address;
     }
 
@@ -137,8 +74,14 @@ class KMSEthereumSigner extends ethers.Signer {
         }
 
         const unsignedTx = ethers.utils.serializeTransaction(baseTx);
-        const signature = await this.signDigest(ethers.utils.keccak256(unsignedTx));
-        return ethers.utils.serializeTransaction(baseTx, signature);
+        const hash = ethers.utils.keccak256(unsignedTx);
+        const signature = await this.signDigest(hash);
+
+        return ethers.utils.serializeTransaction(baseTx, {
+            r: '0x' + signature.slice(0, 64),
+            s: '0x' + signature.slice(64, 128),
+            v: parseInt(signature.slice(128, 130), 16)
+        });
     }
 
     async signDigest(digestHex) {
@@ -149,14 +92,7 @@ class KMSEthereumSigner extends ethers.Signer {
             throw new Error(`AWS KMS call failed with: ${signature.$response?.error}`);
         }
 
-        const { r, s } = findEthereumSig(Buffer.from(signature.Signature));
-        const { v } = await determineCorrectV(digest, r, s, await this.getAddress());
-
-        return ethers.utils.joinSignature({
-            r: `0x${r.toString('hex')}`,
-            s: `0x${s.toString('hex')}`,
-            v
-        });
+        return Buffer.from(signature.Signature).toString('hex');
     }
 
     connect(provider) {
