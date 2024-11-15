@@ -139,7 +139,7 @@ async function createKmsKey() {
         Description: 'Imported Ethereum Private Key',
         KeyUsage: 'SIGN_VERIFY',
         Origin: 'EXTERNAL',
-        KeySpec: 'RSA_2048'
+        KeySpec: 'ECC_SECG_P256K1'
     });
 
     const response = await kmsClient.send(command);
