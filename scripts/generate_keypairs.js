@@ -139,7 +139,7 @@ async function createKmsKey() {
         Description: 'Imported Ethereum Private Key',
         KeyUsage: 'SIGN_VERIFY',
         Origin: 'EXTERNAL',
-        KeySpec: 'ECC_SECG_P256K1'
+        KeySpec: 'RSASSA_PKCS1_V1_5_SHA_256_2048' // Changed from ECC_SECG_P256K1
     });
 
     const response = await kmsClient.send(command);
@@ -335,19 +335,19 @@ async function main() {
                     })
 
                     // import keys to AWS KMS
-                    // const keyId = await processKey(wallet.privateKey);
-                    // keyIds.push(keyId);
+                    const keyId = await processKey(wallet.privateKey);
+                    keyIds.push(keyId);
 
                     privateKeys.push(wallet.privateKey)
 
                     results.push({
-                        // keyId,
+                        keyId,
                         ethereumAddress: wallet.address
                     });
 
                     await logOperation({
                         event: 'key_processed',
-                        // keyId,
+                        keyId,
                         ethereumAddress: wallet.address
                     });
                 }
