@@ -372,7 +372,6 @@ async function main() {
 
                 const importString = JSON.stringify(importKeys)
 
-                fs.appendFileSync('.env', keyIdsString);
                 const timestamp = new Date().toISOString();
                 fs.appendFileSync('.env', "\n\n");
                 fs.appendFileSync('.env', "# ===== START ===== #\n");
@@ -381,6 +380,7 @@ async function main() {
                 fs.appendFileSync('.env', privateKeysString);
                 fs.appendFileSync('.env', "\n");
                 fs.appendFileSync('.env', `IMPORT_KEYS=\`${importString}\`\n`);
+                fs.appendFileSync('.env', keyIdsString);
                 fs.appendFileSync('.env', "# ===== END ===== #");
 
                 console.log('Added key IDs to .env file');
