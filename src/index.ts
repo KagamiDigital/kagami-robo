@@ -20,10 +20,19 @@ import {
 import { getRPCNodeFromNetworkId } from "./utils";
 
 (async () => {
-  process.env.KEYS!.split(",").forEach(async (privateKey, i) => {
-    const wallet = new ethers.Wallet(privateKey);
-    const signer = wallet.connect(provider);
+  process.env.KMS_KEY_IDS!.split(",").forEach(async (keyId, i) => {
+    const signer = new KMSEthereumSigner(
+        keyId,
+        process.env.AWS_REGION,
+        provider
+    );
+
+    // const wallet = new ethers.Wallet(privateKey);
+    // const signer = wallet.connect(provider);
     const publicAddress = await signer.getAddress();
+    console.log('public key', publicAddress)
+    console.log('keyId', keyId)
+
     signers[publicAddress] = signer;
     console.log(`Signer ${i + 1}`, publicAddress);
 
