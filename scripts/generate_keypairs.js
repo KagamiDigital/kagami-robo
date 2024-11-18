@@ -106,14 +106,9 @@ async function convertToPkcs8Der(ecKey) {
     ], pemResult);
 }
 
-
 function encryptWithKmsPublicKey(rsaKeyDer, wrappingPublicKeyBase64) {
-    // Log sizes for debugging
-    console.log('RSA Key Material Size:', rsaKeyDer.length);
-
     // Decode KMS public key from base64
     const wrappingPublicKey = Buffer.from(wrappingPublicKeyBase64, 'base64');
-    console.log('KMS Wrapping Key Size:', wrappingPublicKey.length);
 
     // Create public key object for encryption
     const publicKeyObject = crypto.createPublicKey({
@@ -122,45 +117,26 @@ function encryptWithKmsPublicKey(rsaKeyDer, wrappingPublicKeyBase64) {
         type: 'spki'
     });
 
-    try {
-        // For RSA_AES_KEY_WRAP_SHA_256:
-        // 1. Generate AES key
-        const aesKey = crypto.randomBytes(32);  // 256 bits
+    // For RSA_AES_KEY_WRAP_SHA_256
+    const aesKey = crypto.randomBytes(32); // 256-bit AES key
 
-        // 2. Encrypt RSA key material with AES
-        const iv = crypto.randomBytes(16);
-        const cipher = crypto.createCipheriv('aes-256-gcm', aesKey, iv);
-        const encryptedKeyMaterial = Buffer.concat([
-            cipher.update(rsaKeyDer),
-            cipher.final()
-        ]);
-        const authTag = cipher.getAuthTag();
+    // Wrap the key material with AES
+    const cipher = crypto.createCipheriv('aes-256-wrap', aesKey, Buffer.from('A6A6A6A6A6A6A6A6', 'hex'));
+    const wrappedKey = cipher.update(rsaKeyDer);
+    cipher.final();
 
-        // 3. Encrypt AES key with KMS wrapping key
-        const encryptedAesKey = crypto.publicEncrypt(
-            {
-                key: publicKeyObject,
-                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-                oaepHash: 'sha256'
-            },
-            aesKey
-        );
+    // Encrypt the AES key with the RSA public key
+    const encryptedAesKey = crypto.publicEncrypt(
+        {
+            key: publicKeyObject,
+            padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+            oaepHash: 'sha256'
+        },
+        aesKey
+    );
 
-        // 4. Combine in format expected by KMS
-        return Buffer.concat([
-            encryptedAesKey,
-            iv,
-            authTag,
-            encryptedKeyMaterial
-        ]);
-    } catch (error) {
-        console.error('Encryption error details:', {
-            errorMessage: error.message,
-            keyMaterialSize: rsaKeyDer.length,
-            wrappingKeySize: wrappingPublicKey.length
-        });
-        throw error;
-    }
+    // Concatenate the encrypted AES key and the wrapped key material
+    return Buffer.concat([encryptedAesKey, wrappedKey]);
 }
 
 
