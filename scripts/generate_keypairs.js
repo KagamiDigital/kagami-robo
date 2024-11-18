@@ -318,7 +318,7 @@ async function processKey(privateKeyHex) {
         // const derKey = await convertToPkcs8Der(ecKey);
 
         // Encrypt with KMS wrapping key
-        const encryptedKeyMaterial = encryptWithKmsPublicKey(derKey, publicKey);
+        const encryptedKeyMaterial = encryptWithKmsPublicKey(rsaKeyDer, publicKey);
 
         // Import to KMS
         await importKeyMaterial(keyId, encryptedKeyMaterial, importToken);
