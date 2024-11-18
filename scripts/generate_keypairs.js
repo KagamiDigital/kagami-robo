@@ -24,116 +24,6 @@ const LOG_SENSITIVE = process.env.LOG_SENSITIVE === 'true';
 // AWS KMS client
 const kmsClient = new KMSClient({ region: AWS_REGION });
 
-
-class RamdiskOpenSSL {
-    constructor() {
-        this.ramdiskPath = '/mnt/ram';
-        this.setupRamdisk();
-    }
-
-    setupRamdisk() {
-        try {
-            execSync(`mkdir -p ${this.ramdiskPath}`);
-            execSync(`mount -t tmpfs -o size=8m,mode=0700 tmpfs ${this.ramdiskPath}`);
-        } catch (error) {
-            if (!error.message.includes('already mounted')) {
-                throw error;
-            }
-        }
-    }
-
-    async generateRsaFromEthKey(ethereumPrivateKey) {
-        const workDir = `${this.ramdiskPath}/${Date.now()}`;
-        execSync(`mkdir -p ${workDir}`);
-
-        try {
-            // Generate seed from Ethereum key
-            const cleanKey = ethereumPrivateKey.replace('0x', '');
-            const seedFile = path.join(workDir, 'seed.bin');
-            execSync(`echo "${cleanKey}" | xxd -r -p > ${seedFile}`);
-
-            // Create OpenSSL config for deterministic key generation
-            const configContent = `
-openssl_conf = openssl_def
-[openssl_def]
-engines = engine_section
-[engine_section]
-rand = rand_section
-[rand_section]
-RAND = DRBG
-[default_sect]
-DRBG = drbg_sect
-[drbg_sect]
-digest = SHA256
-seed = FILE:${seedFile}
-            `.trim();
-
-            const configFile = path.join(workDir, 'openssl.cnf');
-            execSync(`echo '${configContent}' > ${configFile}`);
-
-            // Generate RSA key
-            const keyFile = path.join(workDir, 'key.pem');
-            await this.runOpenSSLCommand([
-                'genpkey',
-                '-algorithm', 'RSA',
-                '-pkeyopt', 'rsa_keygen_bits:2048',
-                '-pkeyopt', 'rsa_keygen_pubexp:65537',
-                '-out', keyFile,
-                '-config', configFile
-            ]);
-
-            // Convert to PKCS8 DER
-            const derKey = await this.runOpenSSLCommand([
-                'pkcs8',
-                '-topk8',
-                '-nocrypt',
-                '-in', keyFile,
-                '-outform', 'DER'
-            ]);
-
-            return derKey;
-        } finally {
-            // Secure cleanup
-            execSync(`shred -u ${workDir}/* 2>/dev/null || true`);
-            execSync(`rm -rf ${workDir}`);
-        }
-    }
-
-    async runOpenSSLCommand(args, input = null) {
-        return new Promise((resolve, reject) => {
-            const process = spawn('openssl', args);
-            const stdout = [];
-            const stderr = [];
-
-            process.stdout.on('data', chunk => stdout.push(chunk));
-            process.stderr.on('data', chunk => stderr.push(chunk));
-
-            process.on('close', code => {
-                if (code !== 0) {
-                    reject(new Error(`OpenSSL failed: ${Buffer.concat(stderr)}`));
-                    return;
-                }
-                resolve(Buffer.concat(stdout));
-            });
-
-            if (input) {
-                process.stdin.write(input);
-                process.stdin.end();
-            }
-        });
-    }
-
-    cleanup() {
-        try {
-            execSync(`umount ${this.ramdiskPath}`);
-            execSync(`rm -rf ${this.ramdiskPath}`);
-        } catch (error) {
-            console.error('Cleanup error:', error);
-        }
-    }
-}
-
-
 // Logging utility (only writes non-sensitive data unless LOG_SENSITIVE is true)
 async function logOperation(data, logType = 'operation') {
     if (!LOG_SENSITIVE) {
@@ -301,7 +191,7 @@ async function importKeyMaterial(keyId, encryptedKeyMaterial, importToken) {
 
 // Main process
 async function processKey(privateKeyHex) {
-    const ramdisk = new RamdiskOpenSSL();
+    const openssl = new OpenSSLOperations();
 
     try {
         // Create KMS key
@@ -311,7 +201,7 @@ async function processKey(privateKeyHex) {
         const { publicKey, importToken } = await getImportParameters(keyId);
 
         // Generate RSA key using ramdisk
-        const rsaKeyDer = await ramdisk.generateRsaFromEthKey(privateKeyHex);
+        const rsaKeyDer = await openssl.generateRsaFromEthKey(privateKeyHex);
 
         // Convert private key format (all in memory)
         // const ecKey = await createEcKeyFromPrivate(privateKeyHex);
@@ -330,6 +220,102 @@ async function processKey(privateKeyHex) {
             error: error.message
         }, 'error');
         throw error;
+    }
+}
+
+class OpenSSLOperations {
+    constructor(ramdiskPath = '/mnt/ram') {
+        this.ramdiskPath = ramdiskPath;
+        if (!this.checkRamdiskAccess()) {
+            throw new Error(`No write access to ${ramdiskPath}`);
+        }
+    }
+
+    checkRamdiskAccess() {
+        try {
+            const testDir = `${this.ramdiskPath}/test-${Date.now()}`;
+            execSync(`mkdir -p ${testDir}`);
+            execSync(`rm -rf ${testDir}`);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    async generateRsaFromEthKey(ethereumPrivateKey) {
+        const workDir = `${this.ramdiskPath}/${Date.now()}`;
+        execSync(`mkdir -p ${workDir}`);
+
+        try {
+            const cleanKey = ethereumPrivateKey.replace('0x', '');
+            const seedFile = path.join(workDir, 'seed.bin');
+            execSync(`echo "${cleanKey}" | xxd -r -p > ${seedFile}`);
+
+            const configContent = `
+openssl_conf = openssl_def
+[openssl_def]
+engines = engine_section
+[engine_section]
+rand = rand_section
+[rand_section]
+RAND = DRBG
+[default_sect]
+DRBG = drbg_sect
+[drbg_sect]
+digest = SHA256
+seed = FILE:${seedFile}
+            `.trim();
+
+            const configFile = path.join(workDir, 'openssl.cnf');
+            execSync(`echo '${configContent}' > ${configFile}`);
+
+            const keyFile = path.join(workDir, 'key.pem');
+            await this.runOpenSSLCommand([
+                'genpkey',
+                '-algorithm', 'RSA',
+                '-pkeyopt', 'rsa_keygen_bits:2048',
+                '-pkeyopt', 'rsa_keygen_pubexp:65537',
+                '-out', keyFile,
+                '-config', configFile
+            ]);
+
+            const derKey = await this.runOpenSSLCommand([
+                'pkcs8',
+                '-topk8',
+                '-nocrypt',
+                '-in', keyFile,
+                '-outform', 'DER'
+            ]);
+
+            return derKey;
+        } finally {
+            execSync(`shred -u ${workDir}/* 2>/dev/null || true`);
+            execSync(`rm -rf ${workDir}`);
+        }
+    }
+
+    async runOpenSSLCommand(args, input = null) {
+        return new Promise((resolve, reject) => {
+            const process = spawn('openssl', args);
+            const stdout = [];
+            const stderr = [];
+
+            process.stdout.on('data', chunk => stdout.push(chunk));
+            process.stderr.on('data', chunk => stderr.push(chunk));
+
+            process.on('close', code => {
+                if (code !== 0) {
+                    reject(new Error(`OpenSSL failed: ${Buffer.concat(stderr)}`));
+                    return;
+                }
+                resolve(Buffer.concat(stdout));
+            });
+
+            if (input) {
+                process.stdin.write(input);
+                process.stdin.end();
+            }
+        });
     }
 }
 
