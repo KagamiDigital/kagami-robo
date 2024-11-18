@@ -106,44 +106,10 @@ async function convertToPkcs8Der(ecKey) {
     ], pemResult);
 }
 
-function encryptWithKmsPublicKey(rsaKeyDer, wrappingPublicKeyBase64) {
-    // Decode KMS public key from base64
-    const wrappingPublicKey = Buffer.from(wrappingPublicKeyBase64, 'base64');
-
-    // Create public key object for encryption
-    const publicKeyObject = crypto.createPublicKey({
-        key: wrappingPublicKey,
-        format: 'der',
-        type: 'spki'
-    });
-
-    // For RSA_AES_KEY_WRAP_SHA_256
-    const aesKey = crypto.randomBytes(32); // 256-bit AES key
-
-    // Wrap the key material with AES
-    const cipher = crypto.createCipheriv('aes-256-wrap', aesKey, Buffer.from('A6A6A6A6A6A6A6A6', 'hex'));
-    const wrappedKey = cipher.update(rsaKeyDer);
-    cipher.final();
-
-    // Encrypt the AES key with the RSA public key
-    const encryptedAesKey = crypto.publicEncrypt(
-        {
-            key: publicKeyObject,
-            padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-            oaepHash: 'sha256'
-        },
-        aesKey
-    );
-
-    // Concatenate the encrypted AES key and the wrapped key material
-    return Buffer.concat([encryptedAesKey, wrappedKey]);
-}
-
-
 // Encrypt using Node's Crypto Package because
 // OpenSSL pkeyutl requires using files,
 // and we don't want to store our keys on disk.
-function encryptWithKmsPublicKeyX(ecPrivateKeyDer, wrappingPublicKeyBase64) {
+function encryptWithKmsPublicKey(ecPrivateKeyDer, wrappingPublicKeyBase64) {
     // Decode KMS public key from base64
     const wrappingPublicKey = Buffer.from(wrappingPublicKeyBase64, 'base64');
 
