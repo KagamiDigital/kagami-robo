@@ -245,43 +245,49 @@ class OpenSSLOperations {
     }
 
     async generateRsaFromEthKey(ethereumPrivateKey) {
+
         const workDir = `${this.ramdiskPath}/${Date.now()}`;
         execSync(`mkdir -p ${workDir}`);
 
         try {
+
             const cleanKey = ethereumPrivateKey.replace('0x', '');
             const seedFile = path.join(workDir, 'seed.bin');
-            execSync(`echo "${cleanKey}" | xxd -r -p > ${seedFile}`);
+            const configFile = path.join(workDir, 'openssl.cnf');
+            const keyFile = path.join(workDir, 'key.pem');
 
+            // Write seed file
+            await fs.writeFile(seedFile, Buffer.from(cleanKey, 'hex'));
+
+            // Modified OpenSSL config that uses built-in RAND
             const configContent = `
 openssl_conf = openssl_def
 [openssl_def]
-engines = engine_section
-[engine_section]
-rand = rand_section
-[rand_section]
-RAND = DRBG
 [default_sect]
-DRBG = drbg_sect
+[provider_sect]
+default = default_sect
 [drbg_sect]
 digest = SHA256
+type = CTR
 seed = FILE:${seedFile}
-            `.trim();
+    `.trim();
 
-            const configFile = path.join(workDir, 'openssl.cnf');
-            execSync(`echo '${configContent}' > ${configFile}`);
+            await fs.writeFile(configFile, configContent);
 
-            const keyFile = path.join(workDir, 'key.pem');
-            await this.runOpenSSLCommand([
+            // Set OpenSSL config environment variable
+            process.env.OPENSSL_CONF = configFile;
+
+            // Generate RSA key
+            await runOpenSSLCommand([
                 'genpkey',
                 '-algorithm', 'RSA',
                 '-pkeyopt', 'rsa_keygen_bits:2048',
                 '-pkeyopt', 'rsa_keygen_pubexp:65537',
-                '-out', keyFile,
-                '-config', configFile
+                '-out', keyFile
             ]);
 
-            const derKey = await this.runOpenSSLCommand([
+            // Convert to PKCS8 DER
+            const derKey = await runOpenSSLCommand([
                 'pkcs8',
                 '-topk8',
                 '-nocrypt',
@@ -289,12 +295,23 @@ seed = FILE:${seedFile}
                 '-outform', 'DER'
             ]);
 
+            // Clean up sensitive files
+            await Promise.all([
+                fs.unlink(seedFile),
+                fs.unlink(configFile),
+                fs.unlink(keyFile)
+            ]).catch(console.error);
+
             return derKey;
-        } finally {
+        } catch (err) {
+
+            // Secure cleanup
             execSync(`shred -u ${workDir}/* 2>/dev/null || true`);
             execSync(`rm -rf ${workDir}`);
         }
     }
+
+
 
     async runOpenSSLCommand(args, input = null) {
         return new Promise((resolve, reject) => {
