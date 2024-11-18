@@ -134,11 +134,8 @@ function encryptWithKmsPublicKeyX(ecPrivateKeyDer, wrappingPublicKeyBase64) {
 }
 
 function encryptWithKmsPublicKey(keyMaterial, wrappingPublicKeyBase64) {
-    console.log('Original key material size:', keyMaterial.length);
-
     // Decode KMS public key from base64
     const wrappingPublicKey = Buffer.from(wrappingPublicKeyBase64, 'base64');
-    console.log('Wrapping key size:', wrappingPublicKey.length);
 
     // Create public key object for encryption
     const publicKeyObject = crypto.createPublicKey({
@@ -147,11 +144,10 @@ function encryptWithKmsPublicKey(keyMaterial, wrappingPublicKeyBase64) {
         type: 'spki'
     });
 
-    // Generate a random 256-bit AES key
+    // Generate a random 32-byte AES key
     const aesKey = crypto.randomBytes(32);
-    console.log('AES key size:', aesKey.length);
 
-    // First, encrypt the AES key with RSA
+    // Encrypt the AES key with RSA-OAEP
     const encryptedAesKey = crypto.publicEncrypt(
         {
             key: publicKeyObject,
@@ -160,40 +156,23 @@ function encryptWithKmsPublicKey(keyMaterial, wrappingPublicKeyBase64) {
         },
         aesKey
     );
-    console.log('Encrypted AES key size:', encryptedAesKey.length);
 
-    // Generate IV for AES-GCM
-    const iv = crypto.randomBytes(12);  // 96 bits for GCM
+    // Use AES-256-CBC with PKCS7 padding for key material
+    const iv = crypto.randomBytes(16);  // 16 bytes for CBC
+    const cipher = crypto.createCipheriv('aes-256-cbc', aesKey, iv);
 
-    // Create cipher for AES-GCM
-    const cipher = crypto.createCipheriv('aes-256-gcm', aesKey, iv);
-
-    // Encrypt the key material
     const encryptedKeyMaterial = Buffer.concat([
+        iv,
         cipher.update(keyMaterial),
         cipher.final()
     ]);
 
-    // Get authentication tag
-    const authTag = cipher.getAuthTag();
-
-    console.log('IV size:', iv.length);
-    console.log('Auth tag size:', authTag.length);
-    console.log('Encrypted key material size:', encryptedKeyMaterial.length);
-
-    // Concatenate in the format:
-    // [encrypted AES key][iv][auth tag][encrypted key material]
-    const finalBuffer = Buffer.concat([
-        encryptedAesKey,
-        iv,
-        authTag,
-        encryptedKeyMaterial
+    // Return the concatenated buffers
+    return Buffer.concat([
+        encryptedAesKey,     // 256 bytes (RSA-2048 output)
+        encryptedKeyMaterial // IV (16 bytes) + encrypted material
     ]);
-    console.log('Final encrypted buffer size:', finalBuffer.length);
-
-    return finalBuffer;
 }
-
 // Part 2: KMS Workflows
 async function createKmsKey() {
     const command = new CreateKeyCommand({
