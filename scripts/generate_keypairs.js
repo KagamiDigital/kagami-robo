@@ -133,7 +133,6 @@ function encryptWithKmsPublicKeyX(ecPrivateKeyDer, wrappingPublicKeyBase64) {
     return encryptedPrivateKey;
 }
 
-
 function encryptWithKmsPublicKey(keyMaterial, wrappingPublicKeyBase64) {
     console.log('Original key material size:', keyMaterial.length);
 
@@ -163,20 +162,37 @@ function encryptWithKmsPublicKey(keyMaterial, wrappingPublicKeyBase64) {
     );
     console.log('Encrypted AES key size:', encryptedAesKey.length);
 
-    // Use AES key wrap with zero padding
-    const cipher = crypto.createCipheriv('id-aes256-wrap', aesKey, Buffer.from('A6A6A6A6A6A6A6A6', 'hex'));
-    const wrappedKeyMaterial = cipher.update(keyMaterial);
-    cipher.final();
-    console.log('Wrapped key material size:', wrappedKeyMaterial.length);
+    // Generate IV for AES-GCM
+    const iv = crypto.randomBytes(12);  // 96 bits for GCM
 
-    // Concatenate in the format KMS expects:
-    // [encrypted AES key][wrapped key material]
-    const finalBuffer = Buffer.concat([encryptedAesKey, wrappedKeyMaterial]);
+    // Create cipher for AES-GCM
+    const cipher = crypto.createCipheriv('aes-256-gcm', aesKey, iv);
+
+    // Encrypt the key material
+    const encryptedKeyMaterial = Buffer.concat([
+        cipher.update(keyMaterial),
+        cipher.final()
+    ]);
+
+    // Get authentication tag
+    const authTag = cipher.getAuthTag();
+
+    console.log('IV size:', iv.length);
+    console.log('Auth tag size:', authTag.length);
+    console.log('Encrypted key material size:', encryptedKeyMaterial.length);
+
+    // Concatenate in the format:
+    // [encrypted AES key][iv][auth tag][encrypted key material]
+    const finalBuffer = Buffer.concat([
+        encryptedAesKey,
+        iv,
+        authTag,
+        encryptedKeyMaterial
+    ]);
     console.log('Final encrypted buffer size:', finalBuffer.length);
 
     return finalBuffer;
 }
-
 
 // Part 2: KMS Workflows
 async function createKmsKey() {
