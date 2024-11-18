@@ -109,7 +109,7 @@ async function convertToPkcs8Der(ecKey) {
 // Encrypt using Node's Crypto Package because
 // OpenSSL pkeyutl requires using files,
 // and we don't want to store our keys on disk.
-function encryptWithKmsPublicKey(ecPrivateKeyDer, wrappingPublicKeyBase64) {
+function encryptWithKmsPublicKeyX(ecPrivateKeyDer, wrappingPublicKeyBase64) {
     // Decode KMS public key from base64
     const wrappingPublicKey = Buffer.from(wrappingPublicKeyBase64, 'base64');
 
@@ -132,6 +132,51 @@ function encryptWithKmsPublicKey(ecPrivateKeyDer, wrappingPublicKeyBase64) {
 
     return encryptedPrivateKey;
 }
+
+
+function encryptWithKmsPublicKey(keyMaterial, wrappingPublicKeyBase64) {
+    console.log('Original key material size:', keyMaterial.length);
+
+    // Decode KMS public key from base64
+    const wrappingPublicKey = Buffer.from(wrappingPublicKeyBase64, 'base64');
+    console.log('Wrapping key size:', wrappingPublicKey.length);
+
+    // Create public key object for encryption
+    const publicKeyObject = crypto.createPublicKey({
+        key: wrappingPublicKey,
+        format: 'der',
+        type: 'spki'
+    });
+
+    // Generate a random 256-bit AES key
+    const aesKey = crypto.randomBytes(32);
+    console.log('AES key size:', aesKey.length);
+
+    // First, encrypt the AES key with RSA
+    const encryptedAesKey = crypto.publicEncrypt(
+        {
+            key: publicKeyObject,
+            padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+            oaepHash: 'sha256'
+        },
+        aesKey
+    );
+    console.log('Encrypted AES key size:', encryptedAesKey.length);
+
+    // Use AES key wrap with zero padding
+    const cipher = crypto.createCipheriv('id-aes256-wrap', aesKey, Buffer.from('A6A6A6A6A6A6A6A6', 'hex'));
+    const wrappedKeyMaterial = cipher.update(keyMaterial);
+    cipher.final();
+    console.log('Wrapped key material size:', wrappedKeyMaterial.length);
+
+    // Concatenate in the format KMS expects:
+    // [encrypted AES key][wrapped key material]
+    const finalBuffer = Buffer.concat([encryptedAesKey, wrappedKeyMaterial]);
+    console.log('Final encrypted buffer size:', finalBuffer.length);
+
+    return finalBuffer;
+}
+
 
 // Part 2: KMS Workflows
 async function createKmsKey() {
