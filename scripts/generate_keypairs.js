@@ -147,7 +147,7 @@ function encryptWithKmsPublicKey(keyMaterial, wrappingPublicKeyBase64) {
     // Generate a random 32-byte AES key
     const aesKey = crypto.randomBytes(32);
 
-    // Encrypt the AES key with RSA-OAEP
+    // Encrypt the AES key with RSA
     const encryptedAesKey = crypto.publicEncrypt(
         {
             key: publicKeyObject,
@@ -157,22 +157,35 @@ function encryptWithKmsPublicKey(keyMaterial, wrappingPublicKeyBase64) {
         aesKey
     );
 
-    // Use AES-256-CBC with PKCS7 padding for key material
-    const iv = crypto.randomBytes(16);  // 16 bytes for CBC
-    const cipher = crypto.createCipheriv('aes-256-cbc', aesKey, iv);
+    console.log('Key Material Length:', keyMaterial.length);
+    console.log('AES Key Length:', aesKey.length);
+    console.log('Encrypted AES Key Length:', encryptedAesKey.length);
 
-    const encryptedKeyMaterial = Buffer.concat([
-        iv,
-        cipher.update(keyMaterial),
+    // Ensure key material length is a multiple of 8 bytes (padded if necessary)
+    const paddingLength = (8 - (keyMaterial.length % 8)) % 8;
+    const paddedKeyMaterial = Buffer.concat([
+        keyMaterial,
+        Buffer.alloc(paddingLength, paddingLength)
+    ]);
+
+    // Create AES wrapper
+    const cipher = crypto.createCipheriv('id-aes256-wrap-pad', aesKey, Buffer.from('A6A6A6A6A6A6A6A6', 'hex'));
+    cipher.setAutoPadding(false); // We handled padding manually
+
+    const wrappedKeyMaterial = Buffer.concat([
+        cipher.update(paddedKeyMaterial),
         cipher.final()
     ]);
 
-    // Return the concatenated buffers
-    return Buffer.concat([
-        encryptedAesKey,     // 256 bytes (RSA-2048 output)
-        encryptedKeyMaterial // IV (16 bytes) + encrypted material
-    ]);
+    console.log('Wrapped Key Material Length:', wrappedKeyMaterial.length);
+
+    // Format: [encrypted AES key][wrapped key material]
+    const finalBuffer = Buffer.concat([encryptedAesKey, wrappedKeyMaterial]);
+    console.log('Final Buffer Length:', finalBuffer.length);
+
+    return finalBuffer;
 }
+
 // Part 2: KMS Workflows
 async function createKmsKey() {
     const command = new CreateKeyCommand({
