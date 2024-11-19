@@ -233,6 +233,7 @@ async function getImportParameters(keyId) {
 }
 
 function encryptWithKmsPublicKey(keyMaterial, wrappingPublicKeyBase64) {
+
     console.log('Encrypting key material...');
     console.log('Key material size:', keyMaterial.length);
 
@@ -248,28 +249,41 @@ function encryptWithKmsPublicKey(keyMaterial, wrappingPublicKeyBase64) {
             type: 'spki'
         });
 
-        // Maximum size for RSA-2048 with OAEP SHA-256 is 190 bytes
-        if (keyMaterial.length > 190) {
-            console.error('Key material too large:', keyMaterial.length, 'bytes (max 190)');
-            throw new Error('Key material too large for RSA-2048 OAEP');
-        }
+        // Generate a random AES key
+        const aesKey = crypto.randomBytes(32);  // 256-bit AES key
 
-        // Encrypt with RSAES_OAEP_SHA_256
-        const encryptedKeyMaterial = crypto.publicEncrypt(
+        // Encrypt the AES key with RSA
+        const encryptedAesKey = crypto.publicEncrypt(
             {
                 key: publicKeyObject,
                 padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
                 oaepHash: 'sha256'
             },
-            keyMaterial
+            aesKey
         );
 
-        console.log('Encrypted key material size:', encryptedKeyMaterial.length);
-        return encryptedKeyMaterial;
+        // Use AES to wrap the key material
+        const iv = Buffer.alloc(16, 0);  // Use zero IV for AES key wrap
+        const cipher = crypto.createCipheriv('aes-256-wrap', aesKey, iv);
+
+        const wrappedKeyMaterial = Buffer.concat([
+            cipher.update(keyMaterial),
+            cipher.final()
+        ]);
+
+        // Combine encrypted AES key and wrapped key material
+        const finalBuffer = Buffer.concat([
+            encryptedAesKey,
+            wrappedKeyMaterial
+        ]);
+
+        console.log('Final encrypted buffer size:', finalBuffer.length);
+        return finalBuffer;
     } catch (error) {
         console.error('Encryption failed:', error);
         throw error;
     }
+
 }
 
 async function importKeyMaterial(keyId, encryptedKeyMaterial, importToken) {
