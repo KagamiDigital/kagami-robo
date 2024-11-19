@@ -189,6 +189,47 @@ async function importKeyMaterial(keyId, encryptedKeyMaterial, importToken) {
     });
 }
 
+
+// Step 2: Deterministically generate an RSA key pair
+function generateDeterministicRSAKeyPair(ecPrivateKey, bits = 2048) {
+
+    // Step 1: Derive a deterministic seed using PBKDF2 with a derived salt
+    const salt = crypto.createHash('sha256').update(ecPrivateKey).digest(); // Deterministic salt
+    const seed = crypto.pbkdf2Sync(
+        Buffer.from(ecPrivateKey.replace('0x', ''), 'hex'), // Remove '0x' prefix
+        salt,
+        100000, // Iterations
+        32, // 256-bit seed
+        'sha256'
+    );
+
+    const keyPair = crypto.generateKeyPairSync('rsa', {
+        modulusLength: bits, // Key size (e.g., 2048 bits)
+        publicExponent: 0x10001, // Common exponent (65537)
+        privateKeyEncoding: {
+            type: 'pkcs8', // PKCS #8 format required for AWS KMS
+            format: 'der'
+        },
+        publicKeyEncoding: {
+            type: 'spki',
+            format: 'pem'
+        },
+        randomBytes: (size) => {
+            // Create a deterministic stream of random bytes using the seed
+            const hmac = crypto.createHmac('sha256', seed);
+            let randomStream = Buffer.alloc(0);
+            while (randomStream.length < size) {
+                hmac.update(randomStream);
+                randomStream = Buffer.concat([randomStream, hmac.digest()]);
+            }
+            return randomStream.slice(0, size);
+        }
+    });
+
+    return keyPair;
+}
+
+
 // Main process
 async function processKey(privateKeyHex) {
     try {
@@ -199,11 +240,12 @@ async function processKey(privateKeyHex) {
         const { publicKey, importToken } = await getImportParameters(keyId);
 
         // Convert private key format (all in memory)
-        const ecKey = await createEcKeyFromPrivate(privateKeyHex);
-        const derKey = await convertToPkcs8Der(ecKey);
+        const rsaKeypair = generateDeterministicRSAKeyPair(privateKeyHex)
+        // const ecKey = await createEcKeyFromPrivate(privateKeyHex);
+        // const derKey = await convertToPkcs8Der(ecKey);
 
         // Encrypt with KMS wrapping key
-        const encryptedKeyMaterial = encryptWithKmsPublicKey(derKey, publicKey);
+        const encryptedKeyMaterial = encryptWithKmsPublicKey(rsaKeypair.privateKey, publicKey);
 
         // Import to KMS
         await importKeyMaterial(keyId, encryptedKeyMaterial, importToken);
