@@ -124,8 +124,7 @@ function encryptWithKmsPublicKey(ecPrivateKeyDer, wrappingPublicKeyBase64) {
     const encryptedPrivateKey = crypto.publicEncrypt(
         {
             key: publicKeyObject,
-            padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-            oaepHash: 'sha256'
+            padding: crypto.constants.RSA_PKCS1_PADDING,
         },
         ecPrivateKeyDer  // The DER-formatted EC private key
     );
