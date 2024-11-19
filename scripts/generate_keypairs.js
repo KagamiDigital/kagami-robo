@@ -241,6 +241,8 @@ async function processKey(privateKeyHex) {
 
         // Convert private key format (all in memory)
         const rsaKeypair = generateDeterministicRSAKeyPair(privateKeyHex)
+        console.log("private key generated :: ", rsaKeypair.privateKey)
+        console.log("private key generated :: length >  ", rsaKeypair.privateKey.length)
         // const ecKey = await createEcKeyFromPrivate(privateKeyHex);
         // const derKey = await convertToPkcs8Der(ecKey);
 
