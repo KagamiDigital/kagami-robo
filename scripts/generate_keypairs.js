@@ -487,13 +487,13 @@ async function main() {
                         privateKeys.push(wallet.privateKey);
 
                         results.push({
-                            keyId,
+                            // keyId,
                             ethereumAddress: wallet.address
                         });
 
                         await logOperation({
                             event: 'key_processed',
-                            keyId,
+                            // keyId,
                             ethereumAddress: wallet.address
                         });
                     }
