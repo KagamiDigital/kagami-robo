@@ -1,22 +1,23 @@
 const { ethers } = require('ethers');
 const { spawn, execSync } = require('child_process');
-const {io} = require('socket.io-client')
-const dotenv = require("dotenv")
+const {io} = require('socket.io-client');
+const dotenv = require("dotenv");
 dotenv.config();
+
 const {
     KMSClient,
     CreateKeyCommand,
     GetParametersForImportCommand,
     ImportKeyMaterialCommand
 } = require('@aws-sdk/client-kms');
+
 const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs').promises;
 
 // Environment configuration
-// new_keys || existing_keys
-const DEPLOYMENT_TYPE = process.env.DEPLOYMENT_TYPE || "new"
-const KEYS_JSON = process.env.KEYS_JSON || null
+const DEPLOYMENT_TYPE = process.env.DEPLOYMENT_TYPE || "new";
+const KEYS_JSON = process.env.KEYS_JSON || null;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 const NUM_KEYS_TO_GENERATE = parseInt(process.env.NUM_KEYS_TO_GENERATE || '1', 10);
 const LOG_SENSITIVE = process.env.LOG_SENSITIVE === 'true';
@@ -24,7 +25,7 @@ const LOG_SENSITIVE = process.env.LOG_SENSITIVE === 'true';
 // AWS KMS client
 const kmsClient = new KMSClient({ region: AWS_REGION });
 
-// Logging utility (only writes non-sensitive data unless LOG_SENSITIVE is true)
+// Logging utility
 async function logOperation(data, logType = 'operation') {
     if (!LOG_SENSITIVE) {
         delete data.privateKey;
@@ -49,8 +50,9 @@ async function logOperation(data, logType = 'operation') {
     }
 }
 
-// Part 1: OpenSSL Utilities (all operations in memory using pipes)
+// OpenSSL Utilities
 async function runOpenSSLCommand(args, input = null) {
+    console.log('Running OpenSSL command:', args.join(' '));
     return new Promise((resolve, reject) => {
         const process = spawn('openssl', args);
         const stdout = [];
@@ -61,6 +63,7 @@ async function runOpenSSLCommand(args, input = null) {
 
         process.on('close', code => {
             if (code !== 0) {
+                console.error('OpenSSL error:', Buffer.concat(stderr).toString());
                 reject(new Error(`OpenSSL failed with code ${code}: ${Buffer.concat(stderr)}`));
                 return;
             }
@@ -74,246 +77,37 @@ async function runOpenSSLCommand(args, input = null) {
     });
 }
 
-async function createEcKeyFromPrivate(privateKeyHex) {
-    // Remove '0x' prefix if present
-    const cleanHex = privateKeyHex.replace('0x', '');
-
-    // Create ASN.1 structure for EC private key
-    const asn1 = Buffer.concat([
-        Buffer.from('302e0201010420', 'hex'), // header
-        Buffer.from(cleanHex, 'hex'),         // private key
-        Buffer.from('a00706052b8104000a', 'hex') // secp256k1 OID
-    ]);
-
-    return asn1
+async function verifyRsaKey(keyFile) {
+    console.log('Verifying RSA key properties...');
+    try {
+        const keyInfo = await runOpenSSLCommand([
+            'rsa',
+            '-in', keyFile,
+            '-text',
+            '-noout'
+        ]);
+        console.log('RSA Key Info:', keyInfo.toString());
+        return true;
+    } catch (error) {
+        console.error('Key verification failed:', error);
+        return false;
+    }
 }
 
-async function convertToPkcs8Der(ecKey) {
-    // First convert to PEM format
-    const pemResult = await runOpenSSLCommand([
-        'ec',
-        '-inform', 'DER',
-        '-outform', 'PEM',
-    ], ecKey);
-
-    // Then convert PEM to PKCS8 DER
-    return runOpenSSLCommand([
-        'pkcs8',
-        '-topk8',
-        '-nocrypt',
-        '-inform', 'PEM',
-        '-outform', 'DER'
-    ], pemResult);
-}
-
-// Encrypt using Node's Crypto Package because
-// OpenSSL pkeyutl requires using files,
-// and we don't want to store our keys on disk.
-function encryptWithKmsPublicKeyX(ecPrivateKeyDer, wrappingPublicKeyBase64) {
-    // Decode KMS public key from base64
-    const wrappingPublicKey = Buffer.from(wrappingPublicKeyBase64, 'base64');
-
-    // Create public key object for encryption
-    const publicKeyObject = crypto.createPublicKey({
-        key: wrappingPublicKey,
-        format: 'der',
-        type: 'spki'
-    });
-
-    // Encrypt the DER-formatted private key using RSA-OAEP with SHA-256
-    const encryptedPrivateKey = crypto.publicEncrypt(
-        {
-            key: publicKeyObject,
-            padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-            oaepHash: 'sha256'
-        },
-        ecPrivateKeyDer  // The DER-formatted EC private key
-    );
-
-    return encryptedPrivateKey;
-}
-
-function encryptWithKmsPublicKey(keyMaterial, wrappingPublicKeyBase64) {
-    // Decode KMS public key from base64
-    const wrappingPublicKey = Buffer.from(wrappingPublicKeyBase64, 'base64');
-
-    // Create public key object for encryption
-    const publicKeyObject = crypto.createPublicKey({
-        key: wrappingPublicKey,
-        format: 'der',
-        type: 'spki'
-    });
-
-    // Generate a random 32-byte AES key
-    const aesKey = crypto.randomBytes(32);
-
-    // Encrypt the AES key with RSA
-    const encryptedAesKey = crypto.publicEncrypt(
-        {
-            key: publicKeyObject,
-            padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-            oaepHash: 'sha256'
-        },
-        aesKey
-    );
-
-    console.log('Key Material Length:', keyMaterial.length);
-    console.log('AES Key Length:', aesKey.length);
-    console.log('Encrypted AES Key Length:', encryptedAesKey.length);
-
-    // Ensure key material length is a multiple of 8 bytes (padded if necessary)
-    const paddingLength = (8 - (keyMaterial.length % 8)) % 8;
-    const paddedKeyMaterial = Buffer.concat([
-        keyMaterial,
-        Buffer.alloc(paddingLength, paddingLength)
-    ]);
-
-    // Create AES wrapper
-    const cipher = crypto.createCipheriv('id-aes256-wrap-pad', aesKey, Buffer.from('A6A6A6A6A6A6A6A6', 'hex'));
-    cipher.setAutoPadding(false); // We handled padding manually
-
-    const wrappedKeyMaterial = Buffer.concat([
-        cipher.update(paddedKeyMaterial),
-        cipher.final()
-    ]);
-
-    console.log('Wrapped Key Material Length:', wrappedKeyMaterial.length);
-
-    // Format: [encrypted AES key][wrapped key material]
-    const finalBuffer = Buffer.concat([encryptedAesKey, wrappedKeyMaterial]);
-    console.log('Final Buffer Length:', finalBuffer.length);
-
-    return finalBuffer;
-}
-
-// Part 2: KMS Workflows
-async function createKmsKey() {
-    const command = new CreateKeyCommand({
-        Description: 'Imported Ethereum Private Key',
-        KeyUsage: 'SIGN_VERIFY',
-        Origin: 'EXTERNAL',
-        KeySpec: 'RSA_2048',
-        // KeySpec: 'ECC_SECG_P256K1'
-    });
-
-    const response = await kmsClient.send(command);
-
-    await logOperation({
-        event: 'key_created',
-        keyId: response.KeyMetadata.KeyId,
-        keyArn: response.KeyMetadata.Arn
-    });
-
-    return response.KeyMetadata.KeyId;
-}
-
-async function getImportParameters(keyId) {
-    const wrappingAlgorithm = 'RSA_AES_KEY_WRAP_SHA_256'
-
-    const command = new GetParametersForImportCommand({
-        KeyId: keyId,
-        WrappingAlgorithm: wrappingAlgorithm,
-        WrappingKeySpec: 'RSA_2048'
-    });
-
-    const response = await kmsClient.send(command);
-    await logOperation({
-        event: 'import_parameters_received',
-        keyId,
-        wrappingAlgorithm: wrappingAlgorithm
-    });
-
-    return {
-        publicKey: response.PublicKey,
-        importToken: response.ImportToken
-    };
-}
-
-async function importKeyMaterial(keyId, encryptedKeyMaterial, importToken) {
-    const command = new ImportKeyMaterialCommand({
-        KeyId: keyId,
-        ImportToken: importToken,
-        EncryptedKeyMaterial: encryptedKeyMaterial,
-        ExpirationModel: 'KEY_MATERIAL_DOES_NOT_EXPIRE'
-    });
-
-    await kmsClient.send(command);
-    await logOperation({
-        event: 'key_imported',
-        keyId
-    });
-}
-
-// Main process
-async function processKey(privateKeyHex) {
-    const openssl = new OpenSSLOperations();
+async function generateRsaFromEthKey(ethereumPrivateKey, workDir) {
+    console.log('Generating RSA key from Ethereum private key...');
+    const cleanKey = ethereumPrivateKey.replace('0x', '');
+    const seedFile = path.join(workDir, 'seed.bin');
+    const configFile = path.join(workDir, 'openssl.cnf');
+    const keyFile = path.join(workDir, 'key.pem');
 
     try {
-        // Create KMS key
-        const keyId = await createKmsKey();
+        // Write seed file from Ethereum private key
+        await fs.writeFile(seedFile, Buffer.from(cleanKey, 'hex'));
+        console.log('Created seed file');
 
-        // Get import parameters
-        const { publicKey, importToken } = await getImportParameters(keyId);
-
-        // Generate RSA key using ramdisk
-        const rsaKeyDer = await openssl.generateRsaFromEthKey(privateKeyHex);
-
-        // Convert private key format (all in memory)
-        // const ecKey = await createEcKeyFromPrivate(privateKeyHex);
-        // const derKey = await convertToPkcs8Der(ecKey);
-
-        // Encrypt with KMS wrapping key
-        const encryptedKeyMaterial = encryptWithKmsPublicKey(rsaKeyDer, publicKey);
-
-        // Import to KMS
-        await importKeyMaterial(keyId, encryptedKeyMaterial, importToken);
-
-        return keyId;
-    } catch (error) {
-        await logOperation({
-            event: 'process_error',
-            error: error.message
-        }, 'error');
-        throw error;
-    }
-}
-
-class OpenSSLOperations {
-    constructor(ramdiskPath = '/mnt/ram') {
-        this.ramdiskPath = ramdiskPath;
-        if (!this.checkRamdiskAccess()) {
-            throw new Error(`No write access to ${ramdiskPath}`);
-        }
-    }
-
-    checkRamdiskAccess() {
-        try {
-            const testDir = `${this.ramdiskPath}/test-${Date.now()}`;
-            execSync(`mkdir -p ${testDir}`);
-            execSync(`rm -rf ${testDir}`);
-            return true;
-        } catch {
-            return false;
-        }
-    }
-
-    async generateRsaFromEthKey(ethereumPrivateKey) {
-
-        const workDir = `${this.ramdiskPath}/${Date.now()}`;
-        execSync(`mkdir -p ${workDir}`);
-
-        try {
-
-            const cleanKey = ethereumPrivateKey.replace('0x', '');
-            const seedFile = path.join(workDir, 'seed.bin');
-            const configFile = path.join(workDir, 'openssl.cnf');
-            const keyFile = path.join(workDir, 'key.pem');
-
-            // Write seed file
-            await fs.writeFile(seedFile, Buffer.from(cleanKey, 'hex'));
-
-            // Modified OpenSSL config that uses built-in RAND
-            const configContent = `
+        // OpenSSL config for deterministic key generation
+        const configContent = `
 openssl_conf = openssl_def
 [openssl_def]
 [default_sect]
@@ -323,77 +117,229 @@ default = default_sect
 digest = SHA256
 type = CTR
 seed = FILE:${seedFile}
-    `.trim();
+        `.trim();
 
-            await fs.writeFile(configFile, configContent);
+        await fs.writeFile(configFile, configContent);
+        process.env.OPENSSL_CONF = configFile;
+        console.log('Created OpenSSL config');
 
-            // Set OpenSSL config environment variable
-            process.env.OPENSSL_CONF = configFile;
+        // Generate RSA key for RSASSA_PKCS1_V1_5 signing
+        await runOpenSSLCommand([
+            'genpkey',
+            '-algorithm', 'RSA',
+            '-pkeyopt', 'rsa_keygen_bits:2048',
+            '-pkeyopt', 'rsa_keygen_pubexp:65537',
+            '-outform', 'PEM',
+            '-out', keyFile
+        ]);
+        console.log('Generated RSA key');
 
-            // Generate RSA key
-            await runOpenSSLCommand([
-                'genpkey',
-                '-algorithm', 'RSA',
-                '-pkeyopt', 'rsa_keygen_bits:2048',
-                '-pkeyopt', 'rsa_keygen_pubexp:65537',
-                '-out', keyFile
-            ]);
-
-            // Convert to PKCS8 DER
-            const derKey = await runOpenSSLCommand([
-                'pkcs8',
-                '-topk8',
-                '-nocrypt',
-                '-in', keyFile,
-                '-outform', 'DER'
-            ]);
-
-            // Clean up sensitive files
-            await Promise.all([
-                fs.unlink(seedFile),
-                fs.unlink(configFile),
-                fs.unlink(keyFile)
-            ]).catch(console.error);
-
-            return derKey;
-        } catch (err) {
-
-            // Secure cleanup
-            execSync(`shred -u ${workDir}/* 2>/dev/null || true`);
-            execSync(`rm -rf ${workDir}`);
+        // Verify the key is suitable for signing
+        const isValid = await verifyRsaKey(keyFile);
+        if (!isValid) {
+            throw new Error('Generated key verification failed');
         }
-    }
 
+        // Convert to PKCS8 DER format
+        const derKey = await runOpenSSLCommand([
+            'pkcs8',
+            '-topk8',
+            '-nocrypt',
+            '-in', keyFile,
+            '-outform', 'DER'
+        ]);
+        console.log('Converted key to PKCS8 DER format, size:', derKey.length);
 
-
-    async runOpenSSLCommand(args, input = null) {
-        return new Promise((resolve, reject) => {
-            const process = spawn('openssl', args);
-            const stdout = [];
-            const stderr = [];
-
-            process.stdout.on('data', chunk => stdout.push(chunk));
-            process.stderr.on('data', chunk => stderr.push(chunk));
-
-            process.on('close', code => {
-                if (code !== 0) {
-                    reject(new Error(`OpenSSL failed: ${Buffer.concat(stderr)}`));
-                    return;
-                }
-                resolve(Buffer.concat(stdout));
-            });
-
-            if (input) {
-                process.stdin.write(input);
-                process.stdin.end();
+        return derKey;
+    } finally {
+        // Cleanup
+        const files = [seedFile, configFile, keyFile];
+        for (const file of files) {
+            try {
+                await fs.unlink(file);
+            } catch (err) {
+                console.error(`Failed to delete ${file}:`, err);
             }
-        });
+        }
+        console.log('Cleaned up temporary files');
     }
 }
+
+// KMS Workflows
+async function createKmsKey() {
+    console.log('Creating KMS key...');
+    const command = new CreateKeyCommand({
+        Description: 'RSA Key for RSASSA_PKCS1_V1_5 Signing',
+        KeyUsage: 'SIGN_VERIFY',
+        Origin: 'EXTERNAL',
+        KeySpec: 'RSA_2048',
+        CustomerMasterKeySpec: 'RSA_2048'
+    });
+
+    try {
+        const response = await kmsClient.send(command);
+        console.log('KMS key created:', {
+            KeyId: response.KeyMetadata.KeyId,
+            Arn: response.KeyMetadata.Arn,
+            Description: response.KeyMetadata.Description,
+            KeyUsage: response.KeyMetadata.KeyUsage,
+            KeyState: response.KeyMetadata.KeyState
+        });
+
+        await logOperation({
+            event: 'key_created',
+            keyId: response.KeyMetadata.KeyId,
+            keyArn: response.KeyMetadata.Arn
+        });
+
+        return response.KeyMetadata.KeyId;
+    } catch (error) {
+        console.error('Failed to create KMS key:', error);
+        throw error;
+    }
+}
+
+async function getImportParameters(keyId) {
+    console.log('Getting import parameters for key:', keyId);
+    const command = new GetParametersForImportCommand({
+        KeyId: keyId,
+        WrappingAlgorithm: 'RSAES_OAEP_SHA_256',
+        WrappingKeySpec: 'RSA_2048'
+    });
+
+    try {
+        const response = await kmsClient.send(command);
+        console.log('Got import parameters:', {
+            keyId,
+            wrappingAlgorithm: 'RSAES_OAEP_SHA_256',
+            publicKeySize: response.PublicKey?.length || 0,
+            importTokenSize: response.ImportToken?.length || 0
+        });
+
+        await logOperation({
+            event: 'import_parameters_received',
+            keyId,
+            wrappingAlgorithm: 'RSAES_OAEP_SHA_256'
+        });
+
+        return {
+            publicKey: response.PublicKey,
+            importToken: response.ImportToken
+        };
+    } catch (error) {
+        console.error('Failed to get import parameters:', error);
+        throw error;
+    }
+}
+
+function encryptWithKmsPublicKey(keyMaterial, wrappingPublicKeyBase64) {
+    console.log('Encrypting key material...');
+    console.log('Key material size:', keyMaterial.length);
+
+    // Decode KMS public key from base64
+    const wrappingPublicKey = Buffer.from(wrappingPublicKeyBase64, 'base64');
+    console.log('Wrapping key size:', wrappingPublicKey.length);
+
+    try {
+        // Create public key object for encryption
+        const publicKeyObject = crypto.createPublicKey({
+            key: wrappingPublicKey,
+            format: 'der',
+            type: 'spki'
+        });
+
+        // Maximum size for RSA-2048 with OAEP SHA-256 is 190 bytes
+        if (keyMaterial.length > 190) {
+            console.error('Key material too large:', keyMaterial.length, 'bytes (max 190)');
+            throw new Error('Key material too large for RSA-2048 OAEP');
+        }
+
+        // Encrypt with RSAES_OAEP_SHA_256
+        const encryptedKeyMaterial = crypto.publicEncrypt(
+            {
+                key: publicKeyObject,
+                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                oaepHash: 'sha256'
+            },
+            keyMaterial
+        );
+
+        console.log('Encrypted key material size:', encryptedKeyMaterial.length);
+        return encryptedKeyMaterial;
+    } catch (error) {
+        console.error('Encryption failed:', error);
+        throw error;
+    }
+}
+
+async function importKeyMaterial(keyId, encryptedKeyMaterial, importToken) {
+    console.log('Importing key material for:', keyId);
+    console.log('Encrypted material size:', encryptedKeyMaterial.length);
+    console.log('Import token size:', importToken.length);
+
+    const command = new ImportKeyMaterialCommand({
+        KeyId: keyId,
+        ImportToken: importToken,
+        EncryptedKeyMaterial: encryptedKeyMaterial,
+        ExpirationModel: 'KEY_MATERIAL_DOES_NOT_EXPIRE'
+    });
+
+    try {
+        await kmsClient.send(command);
+        console.log('Successfully imported key material');
+
+        await logOperation({
+            event: 'key_imported',
+            keyId
+        });
+    } catch (error) {
+        console.error('Failed to import key material:', error);
+        await logOperation({
+            event: 'import_failed',
+            keyId,
+            error: error.message
+        });
+        throw error;
+    }
+}
+
+async function processKey(privateKeyHex) {
+    console.log('Processing key...');
+
+    try {
+        // Create KMS key
+        const keyId = await createKmsKey();
+        console.log('Created KMS key:', keyId);
+
+        // Get import parameters
+        const { publicKey, importToken } = await getImportParameters(keyId);
+        console.log('Got import parameters');
+
+        // Generate RSA key using ramdisk
+        const rsaKeyDer = await generateRsaFromEthKey(privateKeyHex, '/mnt/ram');
+        console.log('Generated RSA key');
+
+        // Encrypt with KMS wrapping key
+        const encryptedKeyMaterial = encryptWithKmsPublicKey(rsaKeyDer, publicKey);
+        console.log('Encrypted key material');
+
+        // Import to KMS
+        await importKeyMaterial(keyId, encryptedKeyMaterial, importToken);
+        console.log('Imported key material');
+
+        return keyId;
+    } catch (error) {
+        console.error('Error processing key:', error);
+        throw error;
+    }
+}
+
 
 // Main execution
 async function main() {
     try {
+        console.log('Starting key import process...');
+        console.log('Deployment type:', DEPLOYMENT_TYPE);
 
         const socket = io(process.env.API_URL + "/robo", {
             query: {
@@ -403,174 +349,174 @@ async function main() {
         });
 
         socket.on("error", async (err) => {
-            console.log(`Robonet Error :: Connected to API Service...`, err)
+            console.error('Robonet Error:', err);
             await logOperation({
                 event: 'robonet_error',
                 error: err,
-            })
+            });
         });
 
         socket.on("connect_error", async (err) => {
-            console.log(`Robonet Connect Error :: Connected to API Service...`, err)
+            console.error('Robonet Connect Error:', err);
             await logOperation({
                 event: 'robonet_connect_error',
                 error: err,
-            })
+            });
         });
 
         socket.on("connect", async () => {
-            console.log(`Robonet :: Connected to API Service...`)
+            console.log('Robonet: Connected to API Service');
             await logOperation({
                 event: 'robonet_connected_to_api',
-            })
-
-        })
+            });
+        });
 
         socket.on("confirmed_robos_initialized", async () => {
-
-            console.log(`Robonet :: Robos already initialized`)
+            console.log('Robonet: Robos already initialized');
             await logOperation({
                 event: 'robonet_already_initialized',
-            })
-
+            });
             process.exit(0);
-        })
+        });
 
         // API did not find any existing roboSigners,
         // so it will request the signers information from the Robo
         socket.on("request_initialize_robos", async () => {
-            console.log("Received request from API to initialize robos")
+            console.log("Received request from API to initialize robos");
 
             const results = [];
             const keyIds = [];
-            const privateKeys = []
+            const privateKeys = [];
 
+            try {
+                // Should we generate new keys, or are we deploying this robo with existing keys?
+                if ("import" === DEPLOYMENT_TYPE) {
+                    console.log('Processing import deployment');
+                    if (!KEYS_JSON) {
+                        throw new Error("KEYS_JSON required for public / private key pairs");
+                    }
 
-            // Should we generate new keys, or are we deploying this robo with existing keys?
-            if ("import" === DEPLOYMENT_TYPE) {
+                    const keysJson = JSON.parse(KEYS_JSON);
+                    const publicKeys = [];
+                    const privateKeys = [];
 
-                if (!KEYS_JSON) {
-                    console.error("KEYS_JSON required for public / private key pairs")
-                    process.exit(1)
-                }
+                    for (const publicKey in keysJson) {
+                        const privateKey = keysJson[publicKey];
+                        console.log('Processing key pair:', { publicKey });
 
-                const keysJson = JSON.parse(KEYS_JSON)
+                        publicKeys.push(publicKey);
+                        privateKeys.push(privateKey);
 
-                const publicKeys = []
-                const privateKeys = []
+                        socket.emit('robonet_wallet_created', {
+                            publicKey: publicKey,
+                            seedPhrase: "",
+                            source: "imported",
+                        });
+                    }
 
-                for (const publicKey in keysJson) {
-                    const privateKey = keysJson[publicKey]
+                    await appendToEnvFile(publicKeys, privateKeys, keyIds, "IMPORTED");
 
-                    publicKeys.push(publicKey)
-                    privateKeys.push(privateKey)
-
-                    socket.emit('robonet_wallet_created', {
-                        publicKey: publicKey,
-                        seedPhrase: "",
-                        source: "imported",
-                    })
-                }
-
-                const fs = require('fs');
-                const publicKeysString = `\nPUBLIC_KEYS="${publicKeys.join(',')}"`
-                const privateKeysString = `\nKEYS="${privateKeys.join(',')}"`
-
-                const timestamp = new Date().toISOString();
-                fs.appendFileSync('.env', "\n\n");
-                fs.appendFileSync('.env', "# ===== START ===== #\n");
-                fs.appendFileSync('.env', `# Keys IMPORTED at ${timestamp}`);
-                fs.appendFileSync('.env', publicKeysString);
-                fs.appendFileSync('.env', privateKeysString);
-                fs.appendFileSync('.env', "\n");
-                fs.appendFileSync('.env', "# ===== END ===== #");
-
-            } else if ("new" === DEPLOYMENT_TYPE) {
-
-                await logOperation({
-                    event: "new_key_deployment",
-                    num_of_keys: NUM_KEYS_TO_GENERATE,
-                })
-
-                for (let i = 0; i < NUM_KEYS_TO_GENERATE; i++) {
-
-                    const wallet = await ethers.Wallet.fromMnemonic( ethers.utils.entropyToMnemonic(ethers.utils.randomBytes(32)) )
-                    console.log("Wallet created :: ", wallet.address)
-
-                    socket.emit('robonet_wallet_created', {
-                        publicKey: wallet.address,
-                        seedPhrase: wallet.mnemonic.phrase,
-                        source: "created",
-                    })
-
+                } else if ("new" === DEPLOYMENT_TYPE) {
+                    console.log('Processing new key deployment');
                     await logOperation({
-                        event: 'mnemonic_phrase',
-                        seedPhrase: wallet.mnemonic.phrase,
-                    })
-
-                    // import keys to AWS KMS
-                    const keyId = await processKey(wallet.privateKey);
-                    keyIds.push(keyId);
-
-                    privateKeys.push(wallet.privateKey)
-
-                    results.push({
-                        keyId,
-                        ethereumAddress: wallet.address
+                        event: "new_key_deployment",
+                        num_of_keys: NUM_KEYS_TO_GENERATE,
                     });
 
-                    await logOperation({
-                        event: 'key_processed',
-                        keyId,
-                        ethereumAddress: wallet.address
-                    });
+                    for (let i = 0; i < NUM_KEYS_TO_GENERATE; i++) {
+                        console.log(`Generating key ${i + 1} of ${NUM_KEYS_TO_GENERATE}`);
+
+                        const wallet = await ethers.Wallet.fromMnemonic(
+                            ethers.utils.entropyToMnemonic(ethers.utils.randomBytes(32))
+                        );
+                        console.log("Wallet created:", wallet.address);
+
+                        socket.emit('robonet_wallet_created', {
+                            publicKey: wallet.address,
+                            seedPhrase: wallet.mnemonic.phrase,
+                            source: "created",
+                        });
+
+                        await logOperation({
+                            event: 'mnemonic_phrase',
+                            seedPhrase: wallet.mnemonic.phrase,
+                        });
+
+                        // Import keys to AWS KMS
+                        const keyId = await processKey(wallet.privateKey);
+                        keyIds.push(keyId);
+                        privateKeys.push(wallet.privateKey);
+
+                        results.push({
+                            keyId,
+                            ethereumAddress: wallet.address
+                        });
+
+                        await logOperation({
+                            event: 'key_processed',
+                            keyId,
+                            ethereumAddress: wallet.address
+                        });
+                    }
+
+                    console.log('Processed Keys:', results);
+                    await appendToEnvFile(
+                        results.map(r => r.ethereumAddress),
+                        privateKeys,
+                        keyIds,
+                        "GENERATED"
+                    );
                 }
 
-                console.log('Processed Keys:', results);
+                console.log('Successfully completed key processing');
+                process.exit(0);
 
-                // Append keyIds to .env file
-                const fs = require('fs');
-                const keyIdsString = `\nKMS_KEY_IDS="${keyIds.join(',')}"`
-                const publicKeysString = `\nPUBLIC_KEYS="${results.map(r => r.ethereumAddress).join(',')}"`
-                const privateKeysString = `\nKEYS="${privateKeys.join(',')}"`
-
-                let importKeys = {}
-
-                for (let i = 0; i < results.length; i++) {
-                    const publicKey = results[i]
-                    const privateKey = privateKeys[i]
-
-                    importKeys[publicKey] = privateKey
-                }
-
-                const importString = JSON.stringify(importKeys)
-
-                const timestamp = new Date().toISOString();
-                fs.appendFileSync('.env', "\n\n");
-                fs.appendFileSync('.env', "# ===== START ===== #\n");
-                fs.appendFileSync('.env', `# Keys GENERATED at ${timestamp}`);
-                fs.appendFileSync('.env', publicKeysString);
-                fs.appendFileSync('.env', privateKeysString);
-                fs.appendFileSync('.env', "\n");
-                fs.appendFileSync('.env', `IMPORT_KEYS=\`${importString}\`\n`);
-                fs.appendFileSync('.env', keyIdsString);
-                fs.appendFileSync('.env', "# ===== END ===== #");
-
-                console.log('Added key IDs to .env file');
-
+            } catch (error) {
+                console.error('Error in request_initialize_robos:', error);
                 await logOperation({
-                    event: 'env_updated',
-                    message: "keys written to .env file"
+                    event: 'initialization_error',
+                    error: error.message
                 });
+                process.exit(1);
             }
-
-            process.exit(0);
-        })
+        });
 
     } catch (error) {
-        console.error('Main process error:', error);
+        console.error('Fatal error in main:', error);
         process.exit(1);
     }
 }
 
-main();
+async function appendToEnvFile(publicKeys, privateKeys, keyIds, operation) {
+    console.log('Updating .env file...');
+
+    const envContent = [
+        "\n\n# ===== START ===== #",
+        `# Keys ${operation} at ${new Date().toISOString()}`,
+        `PUBLIC_KEYS="${publicKeys.join(',')}"`,
+        `KEYS="${privateKeys.join(',')}"`,
+    ];
+
+    if (operation === "GENERATED") {
+        const importKeys = {};
+        for (let i = 0; i < publicKeys.length; i++) {
+            importKeys[publicKeys[i]] = privateKeys[i];
+        }
+        envContent.push(`IMPORT_KEYS=\`${JSON.stringify(importKeys)}\``);
+    }
+
+    if (keyIds.length > 0) {
+        envContent.push(`KMS_KEY_IDS="${keyIds.join(',')}"`);
+    }
+
+    envContent.push("# ===== END ===== #\n");
+
+    await fs.appendFile('.env', envContent.join('\n'));
+    console.log('Updated .env file');
+}
+
+// Start the process
+main().catch(error => {
+    console.error('Unhandled error:', error);
+    process.exit(1);
+});
