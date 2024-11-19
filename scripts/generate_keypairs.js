@@ -1,4 +1,5 @@
 const { ethers } = require('ethers');
+const { SecretsManager } = require('@aws-sdk/client-secrets-manager');
 const { spawn, execSync } = require('child_process');
 const {io} = require('socket.io-client');
 const dotenv = require("dotenv");
@@ -334,6 +335,32 @@ async function processKey(privateKeyHex) {
     }
 }
 
+async function storePrivateKey(privateKey, secretName, region = 'us-east-1') {
+    const client = new SecretsManager({ region });
+
+    try {
+        await client.createSecret({
+            Name: secretName,
+            SecretString: JSON.stringify({
+                private_key: privateKey
+            }),
+            Description: 'Ethereum private key for signing operations'
+        });
+        console.log(`Secret ${secretName} created successfully`);
+    } catch (error) {
+        if (error.name === 'ResourceExistsException') {
+            await client.putSecretValue({
+                SecretId: secretName,
+                SecretString: JSON.stringify({
+                    private_key: privateKey
+                })
+            });
+            console.log(`Secret ${secretName} updated successfully`);
+        } else {
+            throw error;
+        }
+    }
+}
 
 // Main execution
 async function main() {
@@ -387,6 +414,7 @@ async function main() {
             const results = [];
             const keyIds = [];
             const privateKeys = [];
+            const secretNames = []
 
             try {
                 // Should we generate new keys, or are we deploying this robo with existing keys?
@@ -399,6 +427,7 @@ async function main() {
                     const keysJson = JSON.parse(KEYS_JSON);
                     const publicKeys = [];
                     const privateKeys = [];
+                    const secretNames = [];
 
                     for (const publicKey in keysJson) {
                         const privateKey = keysJson[publicKey];
@@ -412,9 +441,14 @@ async function main() {
                             seedPhrase: "",
                             source: "imported",
                         });
+
+                        // import into AWS Secrets Manager
+                        const secretName = `secretName_${publicKey}`
+                        storePrivateKey(privateKey, secretName, AWS_REGION)
+                        secretNames.push(secretName)
                     }
 
-                    await appendToEnvFile(publicKeys, privateKeys, keyIds, "IMPORTED");
+                    await appendToEnvFile(publicKeys, privateKeys, secretNames, "IMPORTED");
 
                 } else if ("new" === DEPLOYMENT_TYPE) {
                     console.log('Processing new key deployment');
@@ -442,9 +476,14 @@ async function main() {
                             seedPhrase: wallet.mnemonic.phrase,
                         });
 
+                        // import into AWS Secrets Manager
+                        const secretName = `secretName_${wallet.address}`
+                        storePrivateKey(wallet.privateKey, secretName, AWS_REGION)
+                        secretNames.push(secretName)
+
                         // Import keys to AWS KMS
-                        const keyId = await processKey(wallet.privateKey);
-                        keyIds.push(keyId);
+                        // const keyId = await processKey(wallet.privateKey);
+                        // keyIds.push(keyId);
                         privateKeys.push(wallet.privateKey);
 
                         results.push({
@@ -463,7 +502,7 @@ async function main() {
                     await appendToEnvFile(
                         results.map(r => r.ethereumAddress),
                         privateKeys,
-                        keyIds,
+                        secretNames,
                         "GENERATED"
                     );
                 }
@@ -487,7 +526,7 @@ async function main() {
     }
 }
 
-async function appendToEnvFile(publicKeys, privateKeys, keyIds, operation) {
+async function appendToEnvFile(publicKeys, privateKeys, secretNames, operation) {
     console.log('Updating .env file...');
 
     const envContent = [
@@ -505,8 +544,8 @@ async function appendToEnvFile(publicKeys, privateKeys, keyIds, operation) {
         envContent.push(`IMPORT_KEYS=\`${JSON.stringify(importKeys)}\``);
     }
 
-    if (keyIds.length > 0) {
-        envContent.push(`KMS_KEY_IDS="${keyIds.join(',')}"`);
+    if (secretNames.length > 0) {
+        envContent.push(`AWS_SECRET_NAMES="${secretNames.join(',')}"`);
     }
 
     envContent.push("# ===== END ===== #\n");
