@@ -173,7 +173,6 @@ async function createKmsKey() {
         KeyUsage: 'SIGN_VERIFY',
         Origin: 'EXTERNAL',
         KeySpec: 'RSA_2048',
-        CustomerMasterKeySpec: 'RSA_2048'
     });
 
     try {
