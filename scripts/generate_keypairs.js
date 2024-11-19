@@ -449,6 +449,7 @@ async function main() {
                     }
 
                     await appendToEnvFile(publicKeys, privateKeys, secretNames, "IMPORTED");
+                    await appendToEnvFile_Enclave(secretNames)
 
                 } else if ("new" === DEPLOYMENT_TYPE) {
                     console.log('Processing new key deployment');
@@ -505,6 +506,8 @@ async function main() {
                         secretNames,
                         "GENERATED"
                     );
+
+                    await appendToEnvFile_Enclave(secretNames)
                 }
 
                 console.log('Successfully completed key processing');
@@ -524,6 +527,23 @@ async function main() {
         console.error('Fatal error in main:', error);
         process.exit(1);
     }
+}
+
+async function appendToEnvFile_Enclave(secretNames) {
+    console.log('Updating enclave\'s .env file...');
+
+    const envContent = [
+        "\n\n# ===== START ===== #",
+    ];
+
+    if (secretNames.length > 0) {
+        envContent.push(`AWS_SECRET_NAMES="${secretNames.join(',')}"`);
+    }
+
+    envContent.push("# ===== END ===== #\n");
+
+    await fs.appendFile('/home/ec2-user/enclave-signer/.env', envContent.join('\n'));
+    console.log('Updated .env file');
 }
 
 async function appendToEnvFile(publicKeys, privateKeys, secretNames, operation) {
