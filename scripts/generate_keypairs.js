@@ -158,7 +158,7 @@ async function getImportParameters(keyId) {
     const command = new GetParametersForImportCommand({
         KeyId: keyId,
         WrappingAlgorithm: wrappingAlgorithm,
-        WrappingKeySpec: 'RSA_2048'
+        WrappingKeySpec: 'RSA_4096'
     });
 
     const response = await kmsClient.send(command);
