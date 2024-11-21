@@ -169,10 +169,10 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
   }
 });
 
-socket.on("register", async (data: { signer: string; accountAddress: string }) => {
+socket.on("register", async (data: { signer: string; accountAddress: string, nostrNode: string }) => {
 
-  const { accountAddress, signer } = data;
-  const responsePayload = { accountAddress, signer };
+  const { accountAddress, signer, nostrNode } = data;
+  const responsePayload = { accountAddress, signer, nostrNode };
   
   _sendLogToClient(`SaltRobos: register:event:received for signer: ${signer}`, {}, responsePayload);
 
@@ -214,7 +214,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
   try {
     _sendLogToClient(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
     
-    const res = await automateRegistration(accountAddress, signers[signer])
+    const res = await automateRegistration(accountAddress, signers[signer],undefined, nostrNode, undefined)
     
     _sendLogToClient(`SaltRobos: register:automateRegistration:success:${signer} => response`, {res}, responsePayload)
 
@@ -235,7 +235,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string }) =
 
   try {
     _sendLogToClient(`SaltRobos: register:registerAllSteps:start:${signer} => expect success or failure`, {}, responsePayload)
-    const tx = await registerAllSteps(accountAddress, signers[signer]) as ethers.ContractTransaction
+    const tx = await registerAllSteps(accountAddress, signers[signer],undefined, nostrNode, undefined) as ethers.ContractTransaction
     const res = await tx.wait()
 
     _sendLogToClient(`SaltRobos: register:registerAllSteps:success:${signer} => response`, {res}, responsePayload)
