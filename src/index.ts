@@ -7,9 +7,9 @@ import { ethers } from "ethers";
 const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true});
 const signers: { [index: string]: ethers.Wallet } = {}; 
 
-( () => {
+( async () => {
   console.log('running db script'); 
-  dbScript(); 
+  dbScript();
 })(); 
 
 import {
@@ -21,8 +21,8 @@ import {
   getUserRegistrationAllInfos,
   getUserPreRegisterInfos,
 } from "@intuweb3/exp-node";
-import { getRPCNodeFromNetworkId } from "./utils";
-import { addTransaction, dbScript, getTransactionsForAccount, updateTxHash } from "./database";
+import { getRPCNodeFromNetworkId, rebuildTransactionRecordsForAccount } from "./utils";
+import { addTransaction, dbScript, getTransactionsForAccount } from "./database";
 
 (async () => {
   process.env.KEYS!.split(",").forEach(async (privateKey, i) => {
@@ -59,7 +59,7 @@ socket.on("connect_error", (err:any) => {
   logger.error("Log:Error: Error connect_error connecting to API Socket Stream", err)
 });
 
-socket.on("getAccountTransactions", async (data: {signer:string, accountAddress: string }) => {
+socket.on("requestAccountTransactions", async (data: {signer:string, accountAddress: string }) => {
 
   const { accountAddress, signer } = data;
   let transactions = []
@@ -67,16 +67,17 @@ socket.on("getAccountTransactions", async (data: {signer:string, accountAddress:
 
   _sendLogToClient(`SaltRobos: accountTransactions:${signer} => Event Received From API`, {}, responsePayload)
 
-  
   try {
 
     _sendLogToClient(`SaltRobos: accountTransactions:start:${signer} => expect success or failure`, {}, responsePayload)
     
-    transactions = getTransactionsForAccount(accountAddress);  
+    transactions = await getTransactionsForAccount(accountAddress);  
+
+    console.log(transactions);
 
     _sendLogToClient(`SaltRobos: accountTransactions:success:${signer}`,{}, responsePayload)
     
-      socket.emit("accountTransactions", {
+      socket.emit("accountTransactionsRequest", {
         ...responsePayload,
         success: true,
         error: null,
@@ -97,7 +98,47 @@ socket.on("getAccountTransactions", async (data: {signer:string, accountAddress:
 
     return; 
   }
-}); 
+});
+
+socket.on("accountTransactionsHistoryBuild", async (data: {signer:string, accountAddress: string }) => {
+
+  const { accountAddress, signer } = data;
+  let transactions = []
+  const responsePayload = { accountAddress };
+
+  _sendLogToClient(`SaltRobos: accountTransactionsHistoryBuild:${signer} => Event Received From API`, {}, responsePayload)
+
+  
+  try {
+
+    _sendLogToClient(`SaltRobos: accountTransactionsHistoryBuild:start:${signer} => expect success or failure`, {}, responsePayload)
+    
+    await rebuildTransactionRecordsForAccount(signers[signer],provider,accountAddress);  
+
+    _sendLogToClient(`SaltRobos: accountTransactionsHistoryBuild:success:${signer}`,{}, responsePayload)
+    
+      socket.emit("accountTransactionsHistoryBuildComplete", {
+        ...responsePayload,
+        success: true,
+        error: null,
+      });
+
+      return; 
+  } catch(error) {
+
+    _sendLogToClient(`SaltRobos:Error: accountTransactionsHistoryBuild:failure:${signer} => error`, {error}, responsePayload)
+
+    logger.error(`Log:Error: Error: accountTransactionsHistoryBuild:failure:${signer}`, error)
+
+    socket.emit("accountTransactionsHistoryBuildComplete", {
+      ...responsePayload,
+      success: false,
+      error,
+    });
+
+    return; 
+  }
+});
   
 socket.on("preRegister", async (data: { signer: string; accountAddress: string }) => {
 
@@ -364,9 +405,8 @@ socket.on(
       responsePayload.txReceipt = txReceipt;
 
       // add the transaction to the db
-      addTransaction(accountAddress,txId, networkId,''); 
+      addTransaction(accountAddress, Number(txId), networkId,txReceipt.transactionHash); 
  
-
       _sendLogToClient(`SaltRobos: broadcastTransaction:sendTx:success:${signer} => response`, {}, { responsePayload,txReceipt })
 
       socket.emit("transactionBroadcastingComplete", {

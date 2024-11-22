@@ -1,6 +1,7 @@
 /node_modules
 dist/
 .env
+transactions.sqlite
 index.js
 TODO.md
 /logs/*.log
