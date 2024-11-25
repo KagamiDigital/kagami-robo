@@ -1,4 +1,5 @@
 const { ethers } = require("ethers");
+const { SecretsManager } = require('@aws-sdk/client-secrets-manager');
 const { spawn } = require("child_process");
 const { io } = require("socket.io-client");
 const dotenv = require("dotenv");
@@ -55,7 +56,7 @@ async function logOperation(data, logType = "operation") {
     }
 }
 
-function encryptWithKmsPublicKey(ecPrivateKeyDer, wrappingPublicKeyBin_AWS) {
+function encryptWithKmsPublicKey(rsaPrivateKeyDer, wrappingPublicKeyBin_AWS) {
     // Step 1: Generate a secure AES key and wrap our private key
     const AES_WrappingKey = crypto.randomBytes(32);
     let wrappedPrivateKey;
@@ -68,7 +69,7 @@ function encryptWithKmsPublicKey(ecPrivateKeyDer, wrappingPublicKeyBin_AWS) {
             AES_WrappingKey,
             iv,
         );
-        wrappedPrivateKey = cipher.update(ecPrivateKeyDer);
+        wrappedPrivateKey = cipher.update(rsaPrivateKeyDer);
     }
 
     // Step 2: Encrypte our AES_WrappingKey with the wrappingPublicKeyBin_AWS
@@ -100,8 +101,7 @@ async function createKmsKey() {
         Description: "Imported Ethereum Private Key",
         KeyUsage: "SIGN_VERIFY",
         Origin: "EXTERNAL",
-        KeySpec: "RSA_2048",
-        // KeySpec: 'ECC_SECG_P256K1'
+        KeySpec: 'ECC_SECG_P256K1'
     });
 
     const response = await kmsClient.send(command);
@@ -253,51 +253,153 @@ async function generateDeterministicRSAKeyPair(privateKeyDer, bits = 2048) {
 }
 
 // Main process
-async function processKey(privateKeyHex) {
+async function processRSAKey() {
     try {
         await logOperation({
-            event: "process_key_start",
-            privateKey: privateKeyHex,
+            event: "process_rsa_key_start",
         });
 
-        // Create KMS key
-        const keyId = await createKmsKey();
-        await logOperation({
-            event: "process_key:createKmsKey",
-            keyId,
-        });
+        let keyId
+        let kmsPublicKeyDer, kmsImportTokenDer
+        let rsaPublicKey, rsaPrivateKeyDer
+        let encryptedKeyMaterial
 
-        // Get import parameters
-        // TODO: do these have to be in .bin format for transport?
-        const { publicKeyDer, importTokenDer } = await getImportParameters(keyId);
+        // Create our empty / EXTERNAL KMS key
+        {
+            const command = new CreateKeyCommand({
+                Description: "Imported RSA Private Key",
+                KeyUsage: "SIGN_VERIFY",
+                Origin: "EXTERNAL",
+                KeySpec: "RSA_2048",
+            });
 
-        await logOperation({
-            event: "process_key:getImportParameters",
-            publicKeyDer,
-            importTokenDer,
-            description: "Received DER-formatted PublicKey and ImportToken from AWS.",
-        });
+            const res = await kmsClient.send(command);
 
-        // Convert private key format (all in memory)
-        const rsaKeypair = await generateDeterministicRSAKeyPair(privateKeyHex);
-        //const rsaKeypair = generateRSAKeyPair()
-        const privateKeyDer = rsaKeypair.privateKey;
+            keyId = res.KeyMetadata.KeyId
 
-        await logOperation({
-            event: "process_key:generateDeterministicRSAKeyPair:done",
-            privateKeyHex,
-            privateKeyDer: privateKeyDer.toString('base64')
-            description: "Done generating an RSA keypair. We ignore the public key because KMS doesn't need it.",
-        });
+            await logOperation({
+                event: "key_created",
+                keyId,
+                keyArn: response.KeyMetadata.Arn,
+            });
+        }
+
+        // Get ImportToken and PublicKey from KMS
+        {
+            const wrappingAlgorithm = "RSA_AES_KEY_WRAP_SHA_256";
+            const command = new GetParametersForImportCommand({
+                KeyId: keyId,
+                WrappingAlgorithm: wrappingAlgorithm,
+                WrappingKeySpec: "RSA_4096",
+            });
+
+            // According to the docs, the publicKey and importToken
+            // should be Base64, but the SDK appears to convert them
+            // automatically to Uint8Arrays for the binary data.
+            // The data appears to be DER-encoded
+            const response = await kmsClient.send(command);
+            await logOperation({
+                event: "import_parameters_received",
+                keyId,
+                wrappingAlgorithm,
+            });
+
+            kmsPublicKeyDer = response.PublicKey,
+            kmsImportTokenDer = response.ImportToken,
+
+            await logOperation({
+                event: "process_key:getImportParameters",
+                kmsPublicKeyDer,
+                kmsImportTokenDer,
+                description: "Received DER-formatted PublicKey and ImportToken from AWS.",
+            });
+
+        }
+
+        // Generate an RSA keypair
+        // TODO : shall we do this deterministically from our ECC Private Key?
+        {
+            const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
+                modulusLength: keySize, // 2048, 3072, or 4096
+                publicKeyEncoding: {
+                    type: "spki",
+                    format: "pem",
+                },
+                privateKeyEncoding: {
+                    type: "pkcs8", // KMS expects PKCS#8 format
+                    format: "der",
+                    cipher: undefined, // No encryption for the private key
+                    passphrase: undefined,
+                },
+            });
+
+            rsaPublicKey = publicKey
+            rsaPrivateKeyDer = privateKey
+
+            await logOperation({
+                event: "process_key:generateRSAKeyPair:done",
+                privateKeyHex,
+                rsaPrivateKeyDer: rsaPrivateKeyDer.toString('base64')
+                description: "Done generating an RSA keypair. We ignore the public key because KMS doesn't need it.",
+            });
+        }
 
         // Encrypt with KMS wrapping key
-        const encryptedKeyMaterial = encryptWithKmsPublicKey(
-            privateKeyDer,
-            publicKeyDer,
-        );
+        // Wrapping an RSA private key requires 2 steps:
+        {
+            // Step 1: Generate a secure / symmetric AES key and wrap our private key
+            const AES_WrappingKey = crypto.randomBytes(32);
+            let wrappedPrivateKey;
+            {
+                // iv = required initialization vector -
+                // https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys-encrypt-key-material.html
+                const iv = Buffer.from("A65959A6", "hex");
+                const cipher = crypto.createCipheriv(
+                    "id-aes256-wrap-pad",
+                    AES_WrappingKey,
+                    iv,
+                );
+                wrappedPrivateKey = cipher.update(rsaPrivateKeyDer);
+            }
+
+            // Step 2: Encrypt our AES_WrappingKey with the kmsPublicKeyDer
+            // KMS will unwrap our symmetric key and then unwrap our private key
+            let wrappedAESKey;
+            {
+                const encryptor = crypto.createPublicKey({
+                    key: kmsPublicKeyDer,
+                    format: "der",
+                    type: "spki",
+                });
+
+                wrappedAESKey = crypto.publicEncrypt(
+                    {
+                        key: encryptor,
+                        padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                        oaepHash: "sha256",
+                    },
+                    AES_WrappingKey,
+                );
+            }
+
+            encryptedKeyMaterial = Buffer.concat([wrappedAESKey, wrappedPrivateKey]);
+        }
 
         // Import to KMS
-        await importKeyMaterial(keyId, encryptedKeyMaterial, importTokenDer);
+        {
+            const command = new ImportKeyMaterialCommand({
+                KeyId: keyId,
+                ImportToken: importTokenBin,
+                EncryptedKeyMaterial: encryptedKeyMaterialBin,
+                ExpirationModel: "KEY_MATERIAL_DOES_NOT_EXPIRE",
+            });
+
+            await kmsClient.send(command);
+            await logOperation({
+                event: "key_imported",
+                keyId,
+            });
+        }
 
         return keyId;
     } catch (error) {
@@ -309,6 +411,109 @@ async function processKey(privateKeyHex) {
             "error",
         );
         throw error;
+    }
+}
+async function processKey(privateKeyHex) {
+    try {
+
+        await logOperation({
+            event: "process_key_start",
+            privateKey: privateKeyHex,
+        });
+
+        // Create KMS key
+        let keyId
+
+        // import private key to AWS Secrets Manager
+        {
+
+        }
+
+
+
+        return keyId;
+
+    } catch (error) {
+        await logOperation(
+            {
+                event: "process_error",
+                error: error.message,
+            },
+            "error",
+        );
+        throw error;
+    }
+}
+
+async function appendToEnvFile_Enclave(secretNames) {
+    console.log('Updating enclave\'s .env file...');
+
+    const envContent = [
+        "\n\n# ===== START ===== #",
+    ];
+
+    if (secretNames.length > 0) {
+        envContent.push(`AWS_SECRET_NAMES="${secretNames.join(',')}"`);
+    }
+
+    envContent.push("# ===== END ===== #\n");
+
+    await fs.appendFile('/home/ec2-user/enclave-signer/.env', envContent.join('\n'));
+    console.log('Updated .env file');
+}
+
+async function appendToEnvFile(publicKeys, privateKeys, secretNames, operation) {
+    console.log('Updating .env file...');
+
+    const envContent = [
+        "\n\n# ===== START ===== #",
+        `# Keys ${operation} at ${new Date().toISOString()}`,
+        `PUBLIC_KEYS="${publicKeys.join(',')}"`,
+        `KEYS="${privateKeys.join(',')}"`,
+    ];
+
+    if (operation === "GENERATED") {
+        const importKeys = {};
+        for (let i = 0; i < publicKeys.length; i++) {
+            importKeys[publicKeys[i]] = privateKeys[i];
+        }
+        envContent.push(`IMPORT_KEYS=\`${JSON.stringify(importKeys)}\``);
+    }
+
+    if (secretNames.length > 0) {
+        envContent.push(`AWS_SECRET_NAMES="${secretNames.join(',')}"`);
+    }
+
+    envContent.push("# ===== END ===== #\n");
+
+    await fs.appendFile('.env', envContent.join('\n'));
+    console.log('Updated .env file');
+}
+
+async function storePrivateKey(privateKey, secretName, region = 'us-east-1') {
+    const client = new SecretsManager({ region });
+
+    try {
+        await client.createSecret({
+            Name: secretName,
+            SecretString: JSON.stringify({
+                private_key: privateKey
+            }),
+            Description: 'Ethereum private key for signing operations'
+        });
+        console.log(`Secret ${secretName} created successfully`);
+    } catch (error) {
+        if (error.name === 'ResourceExistsException') {
+            await client.putSecretValue({
+                SecretId: secretName,
+                SecretString: JSON.stringify({
+                    private_key: privateKey
+                })
+            });
+            console.log(`Secret ${secretName} updated successfully`);
+        } else {
+            throw error;
+        }
     }
 }
 
@@ -370,25 +575,22 @@ async function main() {
                     process.exit(1);
                 }
 
-                const keysObj = JSON.parse(IMPORT_KEYS);
+                const keysToImport = JSON.parse(IMPORT_KEYS);
 
                 const publicKeys = [];
                 const privateKeys = [];
-                const keyIds = [];
-                const results = [];
+                const secretNames = []
 
-                for (const publicKey in keysObj) {
-                    const privateKey = keysObj[publicKey];
-
-                    const keyId = await processKey(privateKey);
-                    keyIds.push(keyId);
+                for (const publicKey in keysToImport) {
+                    const privateKey = keysToImport[publicKey];
 
                     publicKeys.push(publicKey);
                     privateKeys.push(privateKey);
-                    results.push({
-                        keyId,
-                        ethereumAddress: publicKey,
-                    });
+
+                    // import into AWS Secrets Manager
+                    const eccKeyId = `secretName_${publicKey}`
+                    storePrivateKey(privateKey, eccKeyId, AWS_REGION)
+                    secretNames.push(eccKeyId)
 
                     socket.emit("robonet_wallet_imported", {
                         publicKey: publicKey,
@@ -398,35 +600,25 @@ async function main() {
 
                     await logOperation({
                         event: "key_processed",
-                        keyId,
+                        eccKeyId,
                         ethereumAddress: publicKey,
                     });
                 }
 
-                const fs = require("fs");
-                const keyIdsString = `\nKMS_KEY_IDS="${keyIds.join(",")}"`;
-                const publicKeysString = `\nPUBLIC_KEYS="${publicKeys.join(",")}"`;
-                const privateKeysString = `\nKEYS="${privateKeys.join(",")}"`;
+                await appendToEnvFile(publicKeys, privateKeys, secretNames, "IMPORTED");
+                await appendToEnvFile_Enclave(secretNames)
 
-                const timestamp = new Date().toISOString();
-                fs.appendFileSync(".env", "\n\n");
-                fs.appendFileSync(".env", "# ===== START ===== #\n");
-                fs.appendFileSync(".env", `# Keys IMPORTED at ${timestamp}`);
-                fs.appendFileSync(".env", publicKeysString);
-                fs.appendFileSync(".env", privateKeysString);
-                fs.appendFileSync(".env", "\n");
-                fs.appendFileSync(".env", keyIdsString);
-                fs.appendFileSync(".env", "\n");
-                fs.appendFileSync(".env", "# ===== END ===== #");
             } else if ("new" === DEPLOYMENT_TYPE) {
                 await logOperation({
                     event: "new_key_deployment",
                     num_of_keys: NUM_KEYS_TO_GENERATE,
                 });
 
-                const keyIds = [];
+                const publicKeys = [];
                 const privateKeys = [];
-                const results = [];
+                const secretNames = []
+
+                // for testing imports
                 const importKeys = {};
 
                 for (let i = 0; i < NUM_KEYS_TO_GENERATE; i++) {
@@ -439,63 +631,40 @@ async function main() {
 
                     importKeys[wallet.address] = wallet.privateKey;
 
-                    socket.emit("robonet_wallet_created", {
-                        publicKey: wallet.address,
-                        seedPhrase: wallet.mnemonic.phrase,
-                        source: "created",
-                    });
-
                     await logOperation({
                         event: "mnemonic_phrase",
                         seedPhrase: wallet.mnemonic.phrase,
                     });
 
                     // import keys to AWS KMS
-                    const keyId = await processKey(wallet.privateKey);
-                    keyIds.push(keyId);
+                    // const rsaKeyId = await processRSAKey();
+
+                    // import into AWS Secrets Manager
+                    const eccKeyId = `secretName_${wallet.address}`
+                    storePrivateKey(wallet.privateKey, eccKeyId, AWS_REGION)
+                    secretNames.push(eccKeyId)
+
+                    socket.emit("robonet_wallet_created", {
+                        publicKey: wallet.address,
+                        seedPhrase: wallet.mnemonic.phrase,
+                        eccKeyId,
+                        rsaKeyId,
+                        source: "created",
+                    });
 
                     privateKeys.push(wallet.privateKey);
 
-                    results.push({
-                        keyId,
-                        ethereumAddress: wallet.address,
-                    });
-
-                    await logOperation({
-                        event: "key_processed",
-                        keyId,
-                        ethereumAddress: wallet.address,
-                    });
+                    publicKeys.push(ethereumAddress: wallet.address);
                 }
 
-                console.log("Processed Keys:", results);
+                await appendToEnvFile(
+                    publicKeys,
+                    privateKeys,
+                    secretNames,
+                    "GENERATED"
+                );
 
-                // Append keyIds to .env file
-                const fs = require("fs");
-                const keyIdsString = `\nKMS_KEY_IDS="${keyIds.join(",")}"`;
-                const publicKeysString = `\nPUBLIC_KEYS="${results.map((r) => r.ethereumAddress).join(",")}"`;
-                const privateKeysString = `\nKEYS="${privateKeys.join(",")}"`;
-
-                const importString = JSON.stringify(importKeys);
-
-                const timestamp = new Date().toISOString();
-                fs.appendFileSync(".env", "\n\n");
-                fs.appendFileSync(".env", "# ===== START ===== #\n");
-                fs.appendFileSync(".env", `# Keys GENERATED at ${timestamp}`);
-                fs.appendFileSync(".env", publicKeysString);
-                fs.appendFileSync(".env", privateKeysString);
-                fs.appendFileSync(".env", "\n");
-                fs.appendFileSync(".env", `IMPORT_KEYS=\`${importString}\`\n`);
-                fs.appendFileSync(".env", keyIdsString);
-                fs.appendFileSync(".env", "\n");
-                fs.appendFileSync(".env", "# ===== END ===== #");
-
-                console.log("Added key IDs to .env file");
-
-                await logOperation({
-                    event: "env_updated",
-                    message: "keys written to .env file",
-                });
+                await appendToEnvFile_Enclave(secretNames)
             }
 
             process.exit(0);
