@@ -3,6 +3,13 @@ import * as dotenv from "dotenv"
 import {io} from 'socket.io-client'
 dotenv.config();
 
+// Parent Instance (Robo) - vsock-client.js
+const net = require('net');
+const VSOCK_PROXY_PORT = 8000;  // Default AWS Nitro Enclaves vsock-proxy port
+const ENCLAVE_CID = 16;         // Default CID for the first enclave
+const ENCLAVE_PORT = 5000;      // Port the Signer app listens on
+let vsockClient = null
+
 import { ethers } from "ethers";
 const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true});
 const signers: { [index: string]: ethers.Wallet } = {};
@@ -19,27 +26,6 @@ import {
 } from "@intuweb3/exp-node";
 import { getRPCNodeFromNetworkId } from "./utils";
 
-(async () => {
-  process.env.KMS_KEY_IDS!.split(",").forEach(async (keyId, i) => {
-    const signer = new KMSEthereumSigner(
-        keyId,
-        process.env.AWS_REGION,
-        provider
-    );
-
-    // const wallet = new ethers.Wallet(privateKey);
-    // const signer = wallet.connect(provider);
-    const publicAddress = await signer.getAddress();
-    console.log('public key', publicAddress)
-    console.log('keyId', keyId)
-
-    signers[publicAddress] = signer;
-    console.log(`Signer ${i + 1}`, publicAddress);
-
-    logger.info(`Signer ${i + 1}`, publicAddress)
-  });
-})();
-
 console.log("Attempting socket on ", process.env.API_URL)
 
 const socket = io(process.env.API_URL + "/robo", {
@@ -49,8 +35,119 @@ const socket = io(process.env.API_URL + "/robo", {
   transports: ["websocket"]
 });
 
-socket.on("connect", () => {
+class VSockClient {
+    constructor() {
+        this.socket = new net.Socket();
+        this.isConnected = false;
+    }
+
+    connect() {
+        return new Promise((resolve, reject) => {
+            this.socket.connect({
+                host: '127.0.0.1',          // vsock-proxy listens on localhost
+                port: VSOCK_PROXY_PORT,
+            }, () => {
+                console.log('Connected to vsock-proxy');
+
+                // Send vsock addressing information
+                const addressingInfo = Buffer.alloc(8);
+                addressingInfo.writeUInt32LE(ENCLAVE_CID, 0);   // CID
+                addressingInfo.writeUInt32LE(ENCLAVE_PORT, 4);  // Port
+
+                this.socket.write(addressingInfo, (err) => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+                    this.isConnected = true;
+                    resolve();
+                });
+            });
+
+            this.socket.on('error', (err) => {
+                console.error('VSock connection error:', err);
+                this.isConnected = false;
+                reject(err);
+            });
+
+            this.socket.on('close', () => {
+                console.log('VSock connection closed');
+                this.isConnected = false;
+            });
+        });
+    }
+
+    send(message) {
+        return new Promise((resolve, reject) => {
+            if (!this.isConnected) {
+                reject(new Error('Not connected to vsock-proxy'));
+                return;
+            }
+
+            this.socket.write(message, (err) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                resolve();
+            });
+        });
+    }
+
+    write(action, message) {
+      const socketMessage = JSON.stringify({
+        action,
+        data: message,
+      })
+
+
+        return new Promise((resolve, reject) => {
+            if (!this.isConnected) {
+                reject(new Error('Not connected to vsock-proxy'));
+                return;
+            }
+
+            this.socket.write(socketMessage, (err) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                resolve();
+            });
+        });
+    }
+
+    close() {
+        if (this.isConnected) {
+            this.socket.end();
+            this.isConnected = false;
+        }
+    }
+}
+
+
+socket.on("connect", async () => {
   console.log(`Connected to server URL : ${process.env.API_URL}`)
+  vsockClient = new VSockClient();
+
+   try {
+        await vsockClient.connect();
+
+        // Example: Send a message to the Signer
+        await vsockClient.send(JSON.stringify({
+            action: 'sign',
+            data: 'Hello from Robo!'
+        }));
+
+        // Handle incoming messages
+        vsockClient.socket.on('data', (data) => {
+            console.log('Received from Signer:', data.toString());
+        });
+
+    } catch (error) {
+        console.error('Error:', error);
+    }
+
 });
 
 socket.on("error", (err:any) => {
@@ -63,31 +160,34 @@ socket.on("connect_error", (err:any) => {
   logger.error("Log:Error: Error connect_error connecting to API Socket Stream", err)
 });
 
-socket.on("preRegister", async (data: { signer: string; accountAddress: string }) => {
+socket.on("preRegister", async (data: { signer: string; signerKeyId: string; accountAddress: string }) => {
 
-  const { accountAddress, signer } = data;
+  const { accountAddress, signer, signerKeyId } = data;
   const responsePayload = { accountAddress, signer };
 
   _sendLogToClient(`SaltRobos: pre-registration:${signer} => Event Received From API`, {}, responsePayload)
 
-  
+
+
+  vsockClient.write('sign', {payload: responsePayload})
+
   try {
 
     _sendLogToClient(`SaltRobos: pre-registration:getPreregistrationStatus:start:${signer} => expect success or failure`, {}, responsePayload)
-    
-    const preRegisterInfo = await getUserPreRegisterInfos(accountAddress,signer,provider); 
+
+    const preRegisterInfo = await getUserPreRegisterInfos(accountAddress,signer,provider);
 
     if(preRegisterInfo.registered) { // user is already pre registered, redundant request
-      
+
       _sendLogToClient(`SaltRobos: pre-registration:getPreregistrationStatus:success:${signer}`, preRegisterInfo.registered, responsePayload)
-    
+
       socket.emit("preRegistrationComplete", {
         ...responsePayload,
         success: true,
         error: null,
       });
 
-      return; 
+      return;
     }
   } catch(error) {
 
@@ -101,9 +201,9 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
       error,
     });
 
-    return; 
+    return;
   }
-  
+
   try {
 
     _sendLogToClient(`SaltRobos: pre-registration:start:${signer} => expect success or failure`, {}, responsePayload)
@@ -137,13 +237,13 @@ socket.on("register", async (data: { signer: string; accountAddress: string, nos
 
   const { accountAddress, signer, nostrNode } = data;
   const responsePayload = { accountAddress, signer, nostrNode };
-  
+
   _sendLogToClient(`SaltRobos: register:event:received for signer: ${signer}`, {}, responsePayload);
 
   try {
 
     _sendLogToClient(`SaltRobos: register:event:getRegistrationStatus:start:${signer} => expect success or failure`, {}, responsePayload);
-   
+
     const res = await getUserRegistrationAllInfos(
       accountAddress,
       signer,
@@ -164,7 +264,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string, nos
   } catch(error) {
 
     _sendLogToClient(`SaltRobos: register:event:getRegistrationStatus:failure:${signer}`, {error}, responsePayload);
-   
+
     logger.error(`Log:Error: Error register:event:getRegistrationStatus:failure:${signer}`, error)
 
     socket.emit("registrationComplete", {
@@ -177,13 +277,13 @@ socket.on("register", async (data: { signer: string; accountAddress: string, nos
 
   try {
     _sendLogToClient(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
-    
+
     const res = await automateRegistration(accountAddress, signers[signer],undefined, nostrNode, undefined)
-    
+
     _sendLogToClient(`SaltRobos: register:automateRegistration:success:${signer} => response`, {res}, responsePayload)
 
   } catch (error) {
-    
+
     _sendLogToClient(`SaltRobos:Error: register:automateRegistration:failure:${signer} => error`, {error}, responsePayload)
 
     logger.error(`Log:Error: Error register:automateRegistration:failure:${signer}`, error)
@@ -194,7 +294,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string, nos
       error: null,
     });
 
-    return; 
+    return;
   }
 
   try {
@@ -224,9 +324,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string, nos
   });
 });
 
-socket.on(
-  "proposeTransaction",
-  async (data: { signer: string; accountAddress: string; txId: string }) => {
+socket.on( "proposeTransaction", async (data: { signer: string; accountAddress: string; txId: string }) => {
 
     const { accountAddress, txId, signer } = data;
     const responsePayload = { accountAddress, txId, signer };
