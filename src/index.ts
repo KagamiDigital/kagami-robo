@@ -39,7 +39,7 @@ const socket = io(process.env.API_URL + '/robo', {
 
 function newVSockClient() {
   const api = {
-    socket: null,
+    socket: new net.Socket(),
     isConnected: false,
     connect,
     send,
