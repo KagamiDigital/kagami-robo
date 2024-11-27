@@ -5,7 +5,12 @@ dotenv.config();
 
 import { ethers } from "ethers";
 const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true});
-const signers: { [index: string]: ethers.Wallet } = {};
+const signers: { [index: string]: ethers.Wallet } = {}; 
+
+( async () => {
+  console.log('running db script'); 
+  dbScript();
+})(); 
 
 import {
   preRegistration,
@@ -16,7 +21,8 @@ import {
   getUserRegistrationAllInfos,
   getUserPreRegisterInfos,
 } from "@intuweb3/exp-node";
-import { getRPCNodeFromNetworkId } from "./utils";
+import { getRPCNodeFromNetworkId, rebuildTransactionRecordsForAccount } from "./utils";
+import { addTransaction, dbScript, getTransactionsForAccount } from "./database";
 
 (async () => {
   process.env.KEYS!.split(",").forEach(async (privateKey, i) => {
@@ -53,6 +59,86 @@ socket.on("connect_error", (err:any) => {
   logger.error("Log:Error: Error connect_error connecting to API Socket Stream", err)
 });
 
+socket.on("requestAccountTransactions", async (data: {signer:string, accountAddress: string }) => {
+
+  const { accountAddress, signer } = data;
+
+  _sendLogToClient(`SaltRobos: accountTransactions:${signer} => Event Received From API`, {}, {accountAddress, signer})
+
+  try {
+
+    _sendLogToClient(`SaltRobos: accountTransactions:start:${signer} => expect success or failure`, {}, {accountAddress, signer})
+    
+    console.log('the account address is '+accountAddress); 
+    const transactions = await getTransactionsForAccount(accountAddress);  
+
+    console.log(transactions);
+
+    _sendLogToClient(`SaltRobos: accountTransactions:success:${signer}`,{}, {accountAddress, signer})
+    
+      socket.emit("accountTransactionsRequest", {
+        ...{transactions,accountAddress, signer},
+        success: true,
+        error: null,
+      });
+
+      return; 
+  } catch(error) {
+
+    _sendLogToClient(`SaltRobos:Error: getAccountTransactions:failure:${signer} => error`, {error}, {accountAddress, signer},)
+
+    logger.error(`Log:Error: Error: getAccountTransactions:failure:${signer}`, error)
+
+    socket.emit("accountTransactionsComplete", {
+      ...{transctions:[],accountAddress, signer},
+      success: false,
+      error,
+    });
+
+    return; 
+  }
+});
+
+socket.on("accountTransactionsHistoryBuild", async (data: {signer:string, accountAddress: string }) => {
+
+  const { accountAddress, signer } = data;
+  let transactions = []
+  const responsePayload = { accountAddress, signer };
+
+  _sendLogToClient(`SaltRobos: accountTransactionsHistoryBuild:${signer} => Event Received From API`, {}, responsePayload)
+
+  
+  try {
+
+    _sendLogToClient(`SaltRobos: accountTransactionsHistoryBuild:start:${signer} => expect success or failure`, {}, responsePayload)
+    
+    await rebuildTransactionRecordsForAccount(signers[signer],provider,accountAddress);  
+
+    _sendLogToClient(`SaltRobos: accountTransactionsHistoryBuild:success:${signer}`,{}, responsePayload)
+    
+      socket.emit("accountTransactionsHistoryBuildComplete", {
+        ...responsePayload,
+        success: true,
+        error: null,
+      });
+
+      return; 
+  } catch(error) {
+
+    _sendLogToClient(`SaltRobos:Error: accountTransactionsHistoryBuild:failure:${signer} => error`, {error}, responsePayload)
+
+    logger.error(`Log:Error: Error: accountTransactionsHistoryBuild:failure:${signer}`, error)
+
+    socket.emit("accountTransactionsHistoryBuildComplete", {
+      ...responsePayload,
+      success: false,
+      error,
+    });
+
+    return; 
+  }
+});
+  
 socket.on("preRegister", async (data: { signer: string; accountAddress: string }) => {
 
   const { accountAddress, signer } = data;
@@ -315,8 +401,11 @@ socket.on(
 
       const txReceipt= await txResponse.wait(); 
 
-      responsePayload.txReceipt = txReceipt; 
+      responsePayload.txReceipt = txReceipt;
 
+      // add the transaction to the db
+      addTransaction(accountAddress, Number(txId), networkId,txReceipt.transactionHash); 
+ 
       _sendLogToClient(`SaltRobos: broadcastTransaction:sendTx:success:${signer} => response`, {}, { responsePayload,txReceipt })
 
       socket.emit("transactionBroadcastingComplete", {

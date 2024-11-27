@@ -15,6 +15,10 @@ module.exports = {
         test: /\.wasm$/,
         type: 'webassembly/async',
       },
+      {
+        test: /\.node$/,
+        use: 'node-loader', // Handle .node files
+    }
     ],
   },
   optimization: {minimize: false},
@@ -40,6 +44,7 @@ module.exports = {
   externals: {
     bufferutil: "bufferutil",
     "utf-8-validate": "utf-8-validate",
+    sqlite3: 'commonjs sqlite3',
   },
   plugins: [
     new webpack.ProvidePlugin({
