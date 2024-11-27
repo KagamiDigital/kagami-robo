@@ -62,23 +62,22 @@ socket.on("connect_error", (err:any) => {
 socket.on("requestAccountTransactions", async (data: {signer:string, accountAddress: string }) => {
 
   const { accountAddress, signer } = data;
-  let transactions = []
-  const responsePayload = { accountAddress, transactions };
 
-  _sendLogToClient(`SaltRobos: accountTransactions:${signer} => Event Received From API`, {}, responsePayload)
+  _sendLogToClient(`SaltRobos: accountTransactions:${signer} => Event Received From API`, {}, {accountAddress, signer})
 
   try {
 
-    _sendLogToClient(`SaltRobos: accountTransactions:start:${signer} => expect success or failure`, {}, responsePayload)
+    _sendLogToClient(`SaltRobos: accountTransactions:start:${signer} => expect success or failure`, {}, {accountAddress, signer})
     
-    transactions = await getTransactionsForAccount(accountAddress);  
+    console.log('the account address is '+accountAddress); 
+    const transactions = await getTransactionsForAccount(accountAddress);  
 
     console.log(transactions);
 
-    _sendLogToClient(`SaltRobos: accountTransactions:success:${signer}`,{}, responsePayload)
+    _sendLogToClient(`SaltRobos: accountTransactions:success:${signer}`,{}, {accountAddress, signer})
     
       socket.emit("accountTransactionsRequest", {
-        ...responsePayload,
+        ...{transactions,accountAddress, signer},
         success: true,
         error: null,
       });
@@ -86,12 +85,12 @@ socket.on("requestAccountTransactions", async (data: {signer:string, accountAddr
       return; 
   } catch(error) {
 
-    _sendLogToClient(`SaltRobos:Error: getAccountTransactions:failure:${signer} => error`, {error}, responsePayload)
+    _sendLogToClient(`SaltRobos:Error: getAccountTransactions:failure:${signer} => error`, {error}, {accountAddress, signer},)
 
     logger.error(`Log:Error: Error: getAccountTransactions:failure:${signer}`, error)
 
     socket.emit("accountTransactionsComplete", {
-      ...responsePayload,
+      ...{transctions:[],accountAddress, signer},
       success: false,
       error,
     });
@@ -104,7 +103,7 @@ socket.on("accountTransactionsHistoryBuild", async (data: {signer:string, accoun
 
   const { accountAddress, signer } = data;
   let transactions = []
-  const responsePayload = { accountAddress };
+  const responsePayload = { accountAddress, signer };
 
   _sendLogToClient(`SaltRobos: accountTransactionsHistoryBuild:${signer} => Event Received From API`, {}, responsePayload)
 

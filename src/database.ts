@@ -4,7 +4,6 @@ import { Database } from 'sqlite3';
 export const dbScript = () => {
     if(!fs.existsSync('./transactions.sqlite')) { 
         const db = new Database('./transactions.sqlite'); 
-      
         const create_table_query = `CREATE TABLE transactions (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           accountAddress TEXT NOT NULL,
@@ -71,7 +70,7 @@ export const getTransactionsForAccount = (accountAddress:string) => {
     
     return new Promise<any>((resolve,reject) => {
         db.all(sql, [accountAddress], (err, rows) => {
-        
+            console.log(rows); 
             if(err) {
                 reject(err); 
             } else {
