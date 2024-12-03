@@ -29,9 +29,9 @@ export const dbScript = () => {
                 console.error('Error checking table existence: ' + err.message);
                 const create_table_query = `CREATE TABLE transactions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    accountAddress TEXT NOT NULL,
+                    accountAddress TEXT collate nocase NOT NULL,
                     txId TEXT NOT NULL,
-                    txHash TEXT NOT NULL
+                    txHash TEXT collate nocase NOT NULL
                     );`
         
                 db.run(create_table_query, (err) => {
