@@ -64,7 +64,7 @@ export const addTransaction = (accountAddress:string, txId:number, chainId:strin
 };
 
 export const getTransactionsForAccount = (accountAddress:string) => {
-    const sql = `SELECT * FROM transactions WHERE accountAddress = ?`;
+    const sql = `SELECT * FROM transactions WHERE accountAddress = ? COLLATE NOCASE`;
 
     const db = new Database('./transactions.sqlite'); 
     
