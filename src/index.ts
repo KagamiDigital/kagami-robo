@@ -5,7 +5,7 @@ dotenv.config();
 
 import { ethers } from "ethers";
 const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true});
-const signers: { [index: string]: ethers.Wallet } = {}; 
+const signers: { [index: string]: ethers.Wallet } = {};
 
 ( async () => {
   console.log('running db script'); 
@@ -23,6 +23,7 @@ import {
 } from "@intuweb3/exp-node";
 import { getRPCNodeFromNetworkId, rebuildTransactionRecordsForAccount } from "./utils";
 import { addTransaction, dbScript, getTransactionsForAccount } from "./database";
+import { RoboSignerStatus } from "./types/RoboSignerStatus";
 
 (async () => {
   process.env.KEYS!.split(",").forEach(async (privateKey, i) => {
@@ -157,10 +158,14 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
       
       publishUpdateToServer(`SaltRobos: pre-registration:getPreregistrationStatus:success:${signer}`, preRegisterInfo.registered, responsePayload)
     
-      socket.emit("preRegistrationComplete", {
-        ...responsePayload,
-        success: true,
-        error: null,
+      const status:RoboSignerStatus = {
+        accountAddress: accountAddress,
+        address:signer,
+        preRegistered:true,
+      }
+
+      socket.emit("accountSetupUpdate", {
+        ...status,
       });
 
       return; 
@@ -171,10 +176,14 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
 
     logger.error(`Log:Error: Error pre-registration:getPreregistrationStatus:failure:${signer}`, error)
 
-    socket.emit("preRegistrationComplete", {
-      ...responsePayload,
-      success: false,
-      error,
+    const status:RoboSignerStatus = {
+      accountAddress: accountAddress,
+      address:signer,
+      preRegistered:false,
+    }
+
+    socket.emit("accountSetupUpdate", {
+      ...status,
     });
 
     return; 
@@ -188,10 +197,14 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
 
     publishUpdateToServer(`SaltRobos: pre-registration:success:${signer} => response`, {res}, responsePayload)
 
-    socket.emit("preRegistrationComplete", {
-      ...responsePayload,
-      success: true,
-      error: null,
+    const status:RoboSignerStatus = {
+      accountAddress: accountAddress,
+      address:signer,
+      preRegistered:true,
+    }
+
+    socket.emit("accountSetupUpdate", {
+      ...status,
     });
 
   } catch (error) {
@@ -200,10 +213,14 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
 
     logger.error(`Log:Error: Error pre-registration:failure:${signer}`, error)
 
-    socket.emit("preRegistrationComplete", {
-      ...responsePayload,
-      success: false,
-      error,
+    const status:RoboSignerStatus = {
+      accountAddress: accountAddress,
+      address:signer,
+      preRegistered:false,
+    }
+
+    socket.emit("accountSetupUpdate", {
+      ...status,
     });
 
   }
@@ -231,11 +248,16 @@ socket.on("register", async (data: { signer: string; accountAddress: string, nos
       
       publishUpdateToServer(`SaltRobos: register:event:getRegistrationStatus:success:${signer}`, userInfos.registered, responsePayload);
    
-      socket.emit("registrationComplete", {
-        ...responsePayload,
-        success: true,
-        error: null,
+      const status:RoboSignerStatus = {
+        accountAddress: accountAddress,
+        address:signer,
+        registered:true,
+      }
+  
+      socket.emit("accountSetupUpdate", {
+        ...status,
       });
+
       return;
     }
   } catch(error) {
@@ -244,10 +266,14 @@ socket.on("register", async (data: { signer: string; accountAddress: string, nos
    
     logger.error(`Log:Error: Error register:event:getRegistrationStatus:failure:${signer}`, error)
 
-    socket.emit("registrationComplete", {
-      ...responsePayload,
-      success: false,
-      error: null,
+    const status:RoboSignerStatus = {
+      accountAddress: accountAddress,
+      address:signer,
+      registered:false,
+    }
+
+    socket.emit("accountSetupUpdate", {
+      ...status,
     });
     return;
   }
@@ -265,10 +291,14 @@ socket.on("register", async (data: { signer: string; accountAddress: string, nos
 
     logger.error(`Log:Error: Error register:automateRegistration:failure:${signer}`, error)
 
-    socket.emit("registrationComplete", {
-      ...responsePayload,
-      success: false,
-      error: null,
+    const status:RoboSignerStatus = {
+      accountAddress: accountAddress,
+      address:signer,
+      registered:false,
+    }
+
+    socket.emit("accountSetupUpdate", {
+      ...status,
     });
 
     return; 
@@ -285,19 +315,27 @@ socket.on("register", async (data: { signer: string; accountAddress: string, nos
 
     logger.error(`Log:Error: Error register:registerAllSteps:failure:${signer}`, error)
 
-    socket.emit("registrationComplete", {
-      ...responsePayload,
-      success: false,
-      error: null,
+    const status:RoboSignerStatus = {
+      accountAddress: accountAddress,
+      address:signer,
+      registered:false,
+    }
+
+    socket.emit("accountSetupUpdate", {
+      ...status,
     });
 
     return
   }
 
-  socket.emit("registrationComplete", {
-    ...responsePayload,
-    success: true,
-    error: null,
+  const status:RoboSignerStatus = {
+    accountAddress: accountAddress,
+    address:signer,
+    registered:true,
+  }
+
+  socket.emit("accountSetupUpdate", {
+    ...status,
   });
 });
 
