@@ -7,6 +7,11 @@ import { ethers } from "ethers";
 const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true});
 const signers: { [index: string]: ethers.Wallet } = {};
 
+( async () => {
+  console.log('running db script'); 
+  dbScript();
+})(); 
+
 import {
   preRegistration,
   automateRegistration,
@@ -16,7 +21,9 @@ import {
   getUserRegistrationAllInfos,
   getUserPreRegisterInfos,
 } from "@intuweb3/exp-node";
-import { getRPCNodeFromNetworkId } from "./utils";
+import { getRPCNodeFromNetworkId, rebuildTransactionRecordsForAccount } from "./utils";
+import { addTransaction, dbScript, getTransactionsForAccount } from "./database";
+import { RoboSignerStatus } from "./types/RoboSignerStatus";
 
 (async () => {
   process.env.KEYS!.split(",").forEach(async (privateKey, i) => {
@@ -53,39 +60,77 @@ socket.on("connect_error", (err:any) => {
   logger.error("Log:Error: Error connect_error connecting to API Socket Stream", err)
 });
 
-socket.on("preRegister", async (data: { signer: string; accountAddress: string }) => {
+socket.on("accountTransactions", async (data: {signer:string, accountAddress: string }) => {
 
   const { accountAddress, signer } = data;
+
+  publishUpdateToServer(`SaltRobos: accountTransactions:${signer} => Event Received From API`, {}, {accountAddress, signer})
+
+  try {
+
+    publishUpdateToServer(`SaltRobos: accountTransactions:start:${signer} => expect success or failure`, {}, {accountAddress, signer})
+    
+    console.log('the account address is '+accountAddress); 
+    const transactions = await getTransactionsForAccount(accountAddress);  
+
+    console.log(transactions);
+
+    publishUpdateToServer(`SaltRobos: accountTransactions:success:${signer}`,{}, {accountAddress, signer})
+    
+      socket.emit("accountTransactions", {
+        ...{transactions,accountAddress, signer},
+        success: true,
+        error: null,
+      });
+
+      return; 
+  } catch(error) {
+
+    publishUpdateToServer(`SaltRobos:Error: getAccountTransactions:failure:${signer} => error`, {error}, {accountAddress, signer},)
+
+    logger.error(`Log:Error: Error: getAccountTransactions:failure:${signer}`, error)
+
+    socket.emit("accountTransactions", {
+      ...{transctions:[],accountAddress, signer},
+      success: false,
+      error,
+    });
+
+    return; 
+  }
+});
+
+socket.on("accountTransactionsHistoryBuild", async (data: {signer:string, accountAddress: string }) => {
+
+  const { accountAddress, signer } = data;
+  let transactions = []
   const responsePayload = { accountAddress, signer };
 
-  _sendLogToClient(`SaltRobos: pre-registration:${signer} => Event Received From API`, {}, responsePayload)
+  publishUpdateToServer(`SaltRobos: accountTransactionsHistoryBuild:${signer} => Event Received From API`, {}, responsePayload)
 
   
   try {
 
-    _sendLogToClient(`SaltRobos: pre-registration:getPreregistrationStatus:start:${signer} => expect success or failure`, {}, responsePayload)
+    publishUpdateToServer(`SaltRobos: accountTransactionsHistoryBuild:start:${signer} => expect success or failure`, {}, responsePayload)
     
-    const preRegisterInfo = await getUserPreRegisterInfos(accountAddress,signer,provider); 
+    await rebuildTransactionRecordsForAccount(signers[signer],provider,accountAddress);  
 
-    if(preRegisterInfo.registered) { // user is already pre registered, redundant request
-      
-      _sendLogToClient(`SaltRobos: pre-registration:getPreregistrationStatus:success:${signer}`, preRegisterInfo.registered, responsePayload)
+    publishUpdateToServer(`SaltRobos: accountTransactionsHistoryBuild:success:${signer}`,{}, responsePayload)
     
-      socket.emit("preRegistrationComplete", {
+      socket.emit("accountTransactionsHistoryBuild", {
         ...responsePayload,
         success: true,
         error: null,
       });
 
       return; 
-    }
   } catch(error) {
 
-    _sendLogToClient(`SaltRobos:Error: pre-registration:getPreRegistrationSatus:failure:${signer} => error`, {error}, responsePayload)
+    publishUpdateToServer(`SaltRobos:Error: accountTransactionsHistoryBuild:failure:${signer} => error`, {error}, responsePayload)
 
-    logger.error(`Log:Error: Error pre-registration:getPreregistrationStatus:failure:${signer}`, error)
+    logger.error(`Log:Error: Error: accountTransactionsHistoryBuild:failure:${signer}`, error)
 
-    socket.emit("preRegistrationComplete", {
+    socket.emit("accountTransactionsHistoryBuild", {
       ...responsePayload,
       success: false,
       error,
@@ -93,124 +138,204 @@ socket.on("preRegister", async (data: { signer: string; accountAddress: string }
 
     return; 
   }
+});
+  
+socket.on("preRegister", async (data: { signer: string; accountAddress: string }) => {
+
+  const { accountAddress, signer } = data;
+  const responsePayload = { accountAddress, signer };
+
+  publishUpdateToServer(`SaltRobos: pre-registration:${signer} => Event Received From API`, {}, responsePayload)
+
   
   try {
 
-    _sendLogToClient(`SaltRobos: pre-registration:start:${signer} => expect success or failure`, {}, responsePayload)
+    publishUpdateToServer(`SaltRobos: pre-registration:getPreregistrationStatus:start:${signer} => expect success or failure`, {}, responsePayload)
+    
+    const preRegisterInfo = await getUserPreRegisterInfos(accountAddress,signer,provider); 
+
+    if(preRegisterInfo.registered) { // user is already pre registered, redundant request
+      
+      publishUpdateToServer(`SaltRobos: pre-registration:getPreregistrationStatus:success:${signer}`, preRegisterInfo.registered, responsePayload)
+    
+      const status:RoboSignerStatus = {
+        accountAddress: accountAddress,
+        address:signer,
+        preRegistered:true,
+      }
+
+      socket.emit("accountSetupUpdate", {
+        ...status,
+      });
+
+      return; 
+    }
+  } catch(error) {
+
+    publishUpdateToServer(`SaltRobos:Error: pre-registration:getPreRegistrationSatus:failure:${signer} => error`, {error}, responsePayload)
+
+    logger.error(`Log:Error: Error pre-registration:getPreregistrationStatus:failure:${signer}`, error)
+
+    const status:RoboSignerStatus = {
+      accountAddress: accountAddress,
+      address:signer,
+      preRegistered:false,
+    }
+
+    socket.emit("accountSetupUpdate", {
+      ...status,
+    });
+
+    return; 
+  }
+  
+  try {
+
+    publishUpdateToServer(`SaltRobos: pre-registration:start:${signer} => expect success or failure`, {}, responsePayload)
     const tx = await preRegistration(accountAddress, signers[signer]) as ethers.ContractTransaction
     const res = await tx.wait();
 
-    _sendLogToClient(`SaltRobos: pre-registration:success:${signer} => response`, {res}, responsePayload)
+    publishUpdateToServer(`SaltRobos: pre-registration:success:${signer} => response`, {res}, responsePayload)
 
-    socket.emit("preRegistrationComplete", {
-      ...responsePayload,
-      success: true,
-      error: null,
+    const status:RoboSignerStatus = {
+      accountAddress: accountAddress,
+      address:signer,
+      preRegistered:true,
+    }
+
+    socket.emit("accountSetupUpdate", {
+      ...status,
     });
 
   } catch (error) {
 
-    _sendLogToClient(`SaltRobos:Error: pre-registration:failure:${signer} => error`, {error}, responsePayload)
+    publishUpdateToServer(`SaltRobos:Error: pre-registration:failure:${signer} => error`, {error}, responsePayload)
 
     logger.error(`Log:Error: Error pre-registration:failure:${signer}`, error)
 
-    socket.emit("preRegistrationComplete", {
-      ...responsePayload,
-      success: false,
-      error,
+    const status:RoboSignerStatus = {
+      accountAddress: accountAddress,
+      address:signer,
+      preRegistered:false,
+    }
+
+    socket.emit("accountSetupUpdate", {
+      ...status,
     });
 
   }
 });
 
-socket.on("register", async (data: { signer: string; accountAddress: string }) => {
+socket.on("register", async (data: { signer: string; accountAddress: string, nostrNode: string }) => {
 
-  const { accountAddress, signer } = data;
-  const responsePayload = { accountAddress, signer };
+  const { accountAddress, signer, nostrNode } = data;
+  const responsePayload = { accountAddress, signer, nostrNode };
   
-  _sendLogToClient(`SaltRobos: register:event:received for signer: ${signer}`, {}, responsePayload);
+  publishUpdateToServer(`SaltRobos: register:event:received for signer: ${signer}`, {}, responsePayload);
 
   try {
 
-    _sendLogToClient(`SaltRobos: register:event:getRegistrationStatus:start:${signer} => expect success or failure`, {}, responsePayload);
+    publishUpdateToServer(`SaltRobos: register:event:getRegistrationStatus:start:${signer} => expect success or failure`, {}, responsePayload);
    
-    const res = await getUserRegistrationAllInfos(
+    const allInfos = (await getUserRegistrationAllInfos(
       accountAddress,
-      signer,
       provider,
-    );
+    )); 
 
-    if(res.registered) { // robo has already registerd, redundant request
+    const userInfos = allInfos.find(el => el !== null && (el.user.toLowerCase() === signer.toLowerCase()));
+
+    if(userInfos && userInfos.registered) { // robo has already registerd, redundant request
       
-      _sendLogToClient(`SaltRobos: register:event:getRegistrationStatus:success:${signer}`, res.registered, responsePayload);
+      publishUpdateToServer(`SaltRobos: register:event:getRegistrationStatus:success:${signer}`, userInfos.registered, responsePayload);
    
-      socket.emit("registrationComplete", {
-        ...responsePayload,
-        success: true,
-        error: null,
+      const status:RoboSignerStatus = {
+        accountAddress: accountAddress,
+        address:signer,
+        registered:true,
+      }
+  
+      socket.emit("accountSetupUpdate", {
+        ...status,
       });
+
       return;
     }
   } catch(error) {
 
-    _sendLogToClient(`SaltRobos: register:event:getRegistrationStatus:failure:${signer}`, {error}, responsePayload);
+    publishUpdateToServer(`SaltRobos: register:event:getRegistrationStatus:failure:${signer}`, {error}, responsePayload);
    
     logger.error(`Log:Error: Error register:event:getRegistrationStatus:failure:${signer}`, error)
 
-    socket.emit("registrationComplete", {
-      ...responsePayload,
-      success: false,
-      error: null,
+    const status:RoboSignerStatus = {
+      accountAddress: accountAddress,
+      address:signer,
+      registered:false,
+    }
+
+    socket.emit("accountSetupUpdate", {
+      ...status,
     });
     return;
   }
 
   try {
-    _sendLogToClient(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
+    publishUpdateToServer(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
     
-    const res = await automateRegistration(accountAddress, signers[signer],undefined,'wss://relay.nostrdice.com',undefined)
+    const res = await automateRegistration(accountAddress, signers[signer],undefined, nostrNode, undefined)
     
-    _sendLogToClient(`SaltRobos: register:automateRegistration:success:${signer} => response`, {res}, responsePayload)
+    publishUpdateToServer(`SaltRobos: register:automateRegistration:success:${signer} => response`, {res}, responsePayload)
 
   } catch (error) {
     
-    _sendLogToClient(`SaltRobos:Error: register:automateRegistration:failure:${signer} => error`, {error}, responsePayload)
+    publishUpdateToServer(`SaltRobos:Error: register:automateRegistration:failure:${signer} => error`, {error}, responsePayload)
 
     logger.error(`Log:Error: Error register:automateRegistration:failure:${signer}`, error)
 
-    socket.emit("registrationComplete", {
-      ...responsePayload,
-      success: false,
-      error: null,
+    const status:RoboSignerStatus = {
+      accountAddress: accountAddress,
+      address:signer,
+      registered:false,
+    }
+
+    socket.emit("accountSetupUpdate", {
+      ...status,
     });
 
     return; 
   }
 
   try {
-    _sendLogToClient(`SaltRobos: register:registerAllSteps:start:${signer} => expect success or failure`, {}, responsePayload)
-    const tx = await registerAllSteps(accountAddress, signers[signer],undefined,'wss://relay.nostrdice.com',undefined) as ethers.ContractTransaction
+    publishUpdateToServer(`SaltRobos: register:registerAllSteps:start:${signer} => expect success or failure`, {}, responsePayload)
+    const tx = await registerAllSteps(accountAddress, signers[signer],undefined, nostrNode, undefined) as ethers.ContractTransaction
     const res = await tx.wait()
 
-    _sendLogToClient(`SaltRobos: register:registerAllSteps:success:${signer} => response`, {res}, responsePayload)
+    publishUpdateToServer(`SaltRobos: register:registerAllSteps:success:${signer} => response`, {res}, responsePayload)
   } catch(error) {
-    _sendLogToClient(`SaltRobos:Error: register:registerAllSteps:failure:${signer} => error`, {error}, responsePayload)
+    publishUpdateToServer(`SaltRobos:Error: register:registerAllSteps:failure:${signer} => error`, {error}, responsePayload)
 
     logger.error(`Log:Error: Error register:registerAllSteps:failure:${signer}`, error)
 
-    socket.emit("registrationComplete", {
-      ...responsePayload,
-      success: false,
-      error: null,
+    const status:RoboSignerStatus = {
+      accountAddress: accountAddress,
+      address:signer,
+      registered:false,
+    }
+
+    socket.emit("accountSetupUpdate", {
+      ...status,
     });
 
     return
   }
 
-  socket.emit("registrationComplete", {
-    ...responsePayload,
-    success: true,
-    error: null,
+  const status:RoboSignerStatus = {
+    accountAddress: accountAddress,
+    address:signer,
+    registered:true,
+  }
+
+  socket.emit("accountSetupUpdate", {
+    ...status,
   });
 });
 
@@ -221,15 +346,15 @@ socket.on(
     const { accountAddress, txId, signer } = data;
     const responsePayload = { accountAddress, txId, signer };
 
-    _sendLogToClient(`SaltRobos: proposeTransaction:signTx:${signer} => Event Received`, {}, responsePayload)
+    publishUpdateToServer(`SaltRobos: proposeTransaction:signTx:${signer} => Event Received`, {}, responsePayload)
 
     try {
-      _sendLogToClient(`SaltRobos: proposeTransaction:signTx:start:${signer} => expect success or failure`, {}, responsePayload)
+      publishUpdateToServer(`SaltRobos: proposeTransaction:signTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
       const tx = await signTx(accountAddress, Number(txId), signers[signer]) as ethers.ContractTransaction
       const res = await tx.wait()
 
-      _sendLogToClient(`SaltRobos: proposeTransaction:signTx:success:${signer} => response`, {res}, responsePayload)
+      publishUpdateToServer(`SaltRobos: proposeTransaction:signTx:success:${signer} => response`, {res}, responsePayload)
 
       socket.emit("transactionSigningComplete", {
         ...responsePayload,
@@ -239,7 +364,7 @@ socket.on(
 
     } catch (error) {
 
-      _sendLogToClient(`SaltRobos:Error: proposeTransaction:signTx:failure:${signer} => error`, {error}, responsePayload)
+      publishUpdateToServer(`SaltRobos:Error: proposeTransaction:signTx:failure:${signer} => error`, {error}, responsePayload)
 
       logger.error(`Log:Error: Error proposeTransaction:signTx:failure:${signer}`, error)
 
@@ -259,14 +384,14 @@ socket.on(
     const { accountAddress, txId, networkId, signer } = data;
     const responsePayload = { accountAddress, txId, signer, txReceipt: null };
 
-    _sendLogToClient(`SaltRobos: broadcastTransaction:signTx:${signer} => Event Received`, {}, responsePayload); 
+    publishUpdateToServer(`SaltRobos: broadcastTransaction:signTx:${signer} => Event Received`, {}, responsePayload); 
 
     const RPC_NODE_URL = getRPCNodeFromNetworkId(networkId);  
     
     if(!RPC_NODE_URL) {
       
       const _error = `network id is not supported: ${networkId}`; 
-      _sendLogToClient(`SaltRobos:Error: broadcastTransaction:failure:${signer} => error`, {_error}, responsePayload)
+      publishUpdateToServer(`SaltRobos:Error: broadcastTransaction:failure:${signer} => error`, {_error}, responsePayload)
 
       logger.error(`Log:Error: Error broadcastTransaction:failure:${signer}`, _error)
 
@@ -282,10 +407,10 @@ socket.on(
     let combineResponse:string;  
 
     try {
-      _sendLogToClient(`SaltRobos: broadcastTransaction:combineTx:start:${signer} => expect success or failure`, {}, responsePayload)
+      publishUpdateToServer(`SaltRobos: broadcastTransaction:combineTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
       combineResponse = await combineSignedTx(accountAddress, Number(txId), signers[signer]);
-      _sendLogToClient(`SaltRobos: broadcastTransaction:combineTx:success:${signer} => response`, {combineResponse}, responsePayload)
+      publishUpdateToServer(`SaltRobos: broadcastTransaction:combineTx:success:${signer} => response`, {combineResponse}, responsePayload)
 
       socket.emit("transactionCombiningComplete", {
         ...responsePayload,
@@ -294,7 +419,7 @@ socket.on(
       });
     } catch (error) {
 
-      _sendLogToClient(`SaltRobos:Error: broadcastTransaction:combineTx:failure:${signer} => error`, {error}, responsePayload)
+      publishUpdateToServer(`SaltRobos:Error: broadcastTransaction:combineTx:failure:${signer} => error`, {error}, responsePayload)
 
       logger.error(`Log:Error: Error broadcastTransaction:combineTx:failure:${signer}`, error)
 
@@ -307,7 +432,7 @@ socket.on(
     }
     try {
 
-      _sendLogToClient(`SaltRobos: broadcastTransaction:sendTx:start:${signer} => expect success or failure`, {}, responsePayload)
+      publishUpdateToServer(`SaltRobos: broadcastTransaction:sendTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
       const _provider = new ethers.providers.StaticJsonRpcProvider({url: RPC_NODE_URL || "",skipFetchSetup:true});
 
@@ -315,9 +440,12 @@ socket.on(
 
       const txReceipt= await txResponse.wait(); 
 
-      responsePayload.txReceipt = txReceipt; 
+      responsePayload.txReceipt = txReceipt;
 
-      _sendLogToClient(`SaltRobos: broadcastTransaction:sendTx:success:${signer} => response`, {}, { responsePayload,txReceipt })
+      // add the transaction to the db
+      addTransaction(accountAddress, Number(txId), networkId,txReceipt.transactionHash); 
+ 
+      publishUpdateToServer(`SaltRobos: broadcastTransaction:sendTx:success:${signer} => response`, {}, { responsePayload,txReceipt })
 
       socket.emit("transactionBroadcastingComplete", {
         ...responsePayload,
@@ -327,7 +455,7 @@ socket.on(
 
     } catch (error) {
 
-      _sendLogToClient(`SaltRobos:Error: broadcastTransaction:sendTx:failure:${signer} => error`, {error}, responsePayload)
+      publishUpdateToServer(`SaltRobos:Error: broadcastTransaction:sendTx:failure:${signer} => error`, {error}, responsePayload)
 
       logger.error(`Log:Error: Error broadcastTransaction:sendTx:failure:${signer}`, error)
 
@@ -340,7 +468,7 @@ socket.on(
   }
 )
 
-function _sendLogToClient(message, data, responsePayload) {
+function publishUpdateToServer(message:string, data:any, responsePayload:any) {
 
   console.error("message:", message)
   console.error("data", data)
