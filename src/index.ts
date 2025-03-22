@@ -281,7 +281,7 @@ socket.on("register", async (data: { signer: string; accountAddress: string, nos
   try {
     publishUpdateToServer(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
     
-    const res = await automateRegistration(accountAddress, signers[signer],undefined, nostrNode, undefined)
+    const res = await automateRegistration(accountAddress, signers[signer], nostrNode, undefined)
     
     publishUpdateToServer(`SaltRobos: register:automateRegistration:success:${signer} => response`, {res}, responsePayload)
 
