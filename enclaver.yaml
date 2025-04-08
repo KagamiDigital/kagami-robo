@@ -12,6 +12,7 @@ egress:
     - kms.*.amazonaws.com
     - 169.254.169.254
     - robonet.salt.space
+    - www.google.com
     - host
 ingress:
   - listen_port: 4300
