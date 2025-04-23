@@ -79,7 +79,6 @@ Resources:
               sudo systemctl start docker && sudo systemctl enable docker
               sudo dnf install -y git
               cd ~
-
               git clone https://github.com/KagamiDigital/kagami-robo.git
               cd kagami-robo
               git config --global --add safe.directory /kagami-robo
