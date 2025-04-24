@@ -1,18 +1,27 @@
 {
     "Version": "2012-10-17",
     "Statement": [
-      {
-        "Sid": "ec2KmsPermissions",
-        "Effect": "Allow",
-        "Action": [
-          "kms:Decrypt"
-        ],
-        "Resource": "*",
-        "Condition": {
-          "StringEqualsIgnoreCase": {
-            "kms:RecipientAttestation:PCR0": "${PCR0}"
-          }
+        {
+            "Action": [
+                "kms:Encrypt",
+                "kms:CreateKey"
+            ],
+            "Resource": "*",
+            "Effect": "Allow",
+            "Sid": "ec2KmsPermissions"
+        },
+        {
+            "Sid": "ec2KmsDecryptPermissions",
+            "Effect": "Allow",
+            "Action": [
+                "kms:Decrypt"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringEqualsIgnoreCase": {
+                    "kms:RecipientAttestation:PCR0": "${PCR0_VALUE}"
+                }
+            }
         }
-      }
     ]
-  }
+}

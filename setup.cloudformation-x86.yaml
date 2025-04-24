@@ -99,6 +99,7 @@ Resources:
               make build-docker
               make build-enclave
               reboot
+              # make run-enclave
   RoboSignerInstance:
     Type: 'AWS::EC2::Instance'
     Properties: 
@@ -134,7 +135,6 @@ Resources:
                 - ec2.amazonaws.com
             Action:
               - 'sts:AssumeRole'
-      # Add this inline policy with your KMS permissions
       Policies:
         - PolicyName: "KMSEnclavePermissions"
           PolicyDocument:
@@ -145,6 +145,24 @@ Resources:
                 Action:
                   - 'kms:Encrypt'
                   - 'kms:CreateKey'
+                Resource: "*"
+              - Sid: "ec2KmsDecryptPermissions"
+                Effect: "Allow"
+                Action:
+                  - 'kms:Decrypt'
+                Resource: "*"
+                Condition:
+                  StringEqualsIgnoreCase:
+                    "kms:RecipientAttestation:PCR0": "${PCR0}"
+              - Sid: "IAMPolicyManagement"
+                Effect: "Allow"
+                Action:
+                  - 'iam:GetPolicy'
+                  - 'iam:GetPolicyVersion'
+                  - 'iam:ListPolicyVersions'
+                  - 'iam:CreatePolicyVersion'
+                  - 'iam:SetDefaultPolicyVersion'
+                  - 'iam:ListPolicies'
                 Resource: "*"
   RoboSignerInstanceProfile:
     Type: "AWS::IAM::InstanceProfile"
