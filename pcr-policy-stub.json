@@ -19,7 +19,7 @@
             "Resource": "*",
             "Condition": {
                 "StringEqualsIgnoreCase": {
-                    "kms:RecipientAttestation:PCR0": "${PCR0_VALUE}"
+                    "kms:RecipientAttestation:PCR0": "__PCR0__"
                 }
             }
         }
