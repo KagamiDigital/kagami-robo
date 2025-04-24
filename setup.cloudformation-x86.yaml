@@ -84,7 +84,7 @@ Resources:
               sudo dnf install -y git
               sudo dnf install -y python3-pip
               sudo dnf install -y make
-              cd home/ec2-user
+              cd /home/ec2-user
               git clone https://github.com/KagamiDigital/kagami-robo.git
               cd kagami-robo
               git config --global --add safe.directory /kagami-robo
