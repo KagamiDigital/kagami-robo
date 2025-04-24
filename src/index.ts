@@ -1,10 +1,10 @@
 import * as logger from "./logger"
 import * as dotenv from "dotenv"
 import {io} from 'socket.io-client'
-//const https_proxy_agent = require("https-proxy-agent");
+const https_proxy_agent = require("https-proxy-agent");
 dotenv.config();
 
-//const agent = new https_proxy_agent.HttpsProxyAgent(process.env.HTTPS_PROXY); 
+const agent = new https_proxy_agent.HttpsProxyAgent(process.env.HTTPS_PROXY); 
 
 import { ethers } from "ethers";
 const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true, fetchOptions: {agent: agent}});
@@ -47,7 +47,7 @@ const socket = io(process.env.API_URL + "/robo", {
     apiKey: process.env.API_KEY,
   },
   transports: ["websocket"],
-  //agent: agent
+  agent: agent
 });
 
 socket.on("connect", () => {

@@ -1,0 +1,18 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "ec2KmsPermissions",
+        "Effect": "Allow",
+        "Action": [
+          "kms:Decrypt"
+        ],
+        "Resource": "*",
+        "Condition": {
+          "StringEqualsIgnoreCase": {
+            "kms:RecipientAttestation:PCR0": "${PCR0}"
+          }
+        }
+      }
+    ]
+  }

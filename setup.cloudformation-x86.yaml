@@ -77,8 +77,10 @@ Resources:
               usermod -aG docker ec2-user
               sudo systemctl start nitro-enclaves-allocator.service && sudo systemctl enable nitro-enclaves-allocator.service
               sudo systemctl start docker && sudo systemctl enable docker
+              sed -i 's/memory_mib: 512/memory_mib: 3072/g' /etc/nitro_enclaves/allocator.yaml
               sudo dnf install -y git
-              cd ~
+              sudo dnf install -y python3-pip
+              cd home/ec2-user
               git clone https://github.com/KagamiDigital/kagami-robo.git
               cd kagami-robo
               git config --global --add safe.directory /kagami-robo
@@ -86,7 +88,11 @@ Resources:
               cd setup
               pip3 install boto3==1.37.16
               pip3 install mnemonic
+              export AWS_DEFAULT_REGION=us-east-1
               python3 bootstrap.py
+              cd ..
+              make build-docker
+              make build-enclave
               reboot
   RoboSignerInstance:
     Type: 'AWS::EC2::Instance'
@@ -133,14 +139,8 @@ Resources:
                 Effect: "Allow"
                 Action:
                   - 'kms:Encrypt'
+                  - 'kms:CreateKey'
                 Resource: "*"
-              - Sid: "enclave"
-                Effect: "Allow"
-                Action: "kms:Decrypt"
-                Resource: "*"
-                Condition:
-                  StringEqualsIgnoreCase:
-                    "kms:RecipientAttestation:PCR0": "33c077e29a8b728ad2cc55c3afb6c8c5e22174d2f8e66e583a663917f1c1f0a0b882c2916e81fbc645db71e4e32eebb5"
   RoboSignerInstanceProfile:
     Type: "AWS::IAM::InstanceProfile"
     Properties:
