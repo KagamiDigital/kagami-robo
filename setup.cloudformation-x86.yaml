@@ -78,8 +78,12 @@ Resources:
               sudo systemctl start nitro-enclaves-allocator.service && sudo systemctl enable nitro-enclaves-allocator.service
               sudo systemctl start docker && sudo systemctl enable docker
               sed -i 's/memory_mib: 512/memory_mib: 3072/g' /etc/nitro_enclaves/allocator.yaml
+              sudo curl --silent --location https://github.com/enclaver-io/enclaver/releases/download/v0.5.0/enclaver-linux-x86_64-v0.5.0.tar.gz --output enclaver.tar.gz
+              sudo tar --extract --verbose --file enclaver.tar.gz
+              sudo install enclaver-linux-$(uname -m)-v*/enclaver /usr/bin
               sudo dnf install -y git
               sudo dnf install -y python3-pip
+              sudo dnf install -y make
               cd home/ec2-user
               git clone https://github.com/KagamiDigital/kagami-robo.git
               cd kagami-robo
@@ -91,6 +95,7 @@ Resources:
               export AWS_DEFAULT_REGION=us-east-1
               python3 bootstrap.py
               cd ..
+              sudo mv .env.sample .env
               make build-docker
               make build-enclave
               reboot
