@@ -13,6 +13,6 @@ def recover():
     seed = kms_decrypt(cyphertext, keyId)
 
     mnemo = Mnemonic("english")
-    words = mnemo.to_mnemonic(binary_data)
+    words = mnemo.to_mnemonic(seed)
 
     return words
