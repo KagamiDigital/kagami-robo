@@ -12,7 +12,6 @@
     "@intuweb3/exp-node": "^0.99.954",
     "@types/sqlite3": "^3.1.11",
     "assert-browserify": "^2.0.0",
-    "bip39": "^3.1.0",
     "buffer-browserify": "^0.2.5",
     "bufferutil": "^4.0.8",
     "crypto-browserify": "^3.12.0",
