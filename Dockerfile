@@ -14,7 +14,7 @@ RUN npm install -g webpack webpack-cli
 RUN apk add --no-cache socat
 
 # Install Python dependencies
-COPY requirements.txt ./
+COPY setup/enclave/requirements.txt ./
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy webpack config and tsconfig
