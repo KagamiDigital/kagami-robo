@@ -8,10 +8,8 @@ def kms_decrypt(cyphertext, keyId):
     """
     kms_endpoint = os.environ.get('AWS_KMS_ENDPOINT')
     if kms_endpoint:
-        print("KMS proxy configured at ", kms_endpoint)
         client = boto3.client("kms", endpoint_url=kms_endpoint)
     else:
-        print("KMS proxy is NOT configured => running outside enclave")
         client = boto3.client("kms")
 
     plaintext = client.decrypt(

@@ -33,6 +33,7 @@ import { RoboSignerStatus } from "./types/RoboSignerStatus";
 (async () => {
   try {
     let seed = await recoverSeed(); 
+    seed = seed.replace(/^b['"]|['"]$/g, '')
     console.log('recovered seed => : ', seed); 
     ethers.utils.HDNode.fromSeed('0x'+seed)
     // Use the seed phrase in your application
