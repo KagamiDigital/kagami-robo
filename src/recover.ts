@@ -4,7 +4,7 @@ import { spawn } from 'child_process';
  * Execute the Python recover script and return the seed phrase
  * @returns Promise containing the recovered seed phrase
  */
-export function recoverMnemonic(): Promise<string> {
+export function recoverSeed(): Promise<string> {
   return new Promise((resolve, reject) => {
     const pythonProcess = spawn('python3', ['recover.py']);
     let output = '';
