@@ -50,7 +50,7 @@ import { RoboSignerStatus } from "./types/RoboSignerStatus";
         privateKey: wallet.privateKey
       });
     }
-    for(let i = 0; i <= wallets.length ; i ++) {
+    for(let i = 0; i < wallets.length ; i ++) {
       const wallet = new ethers.Wallet(wallets[i].privateKey);
       const signer = wallet.connect(provider);
       const publicAddress = await signer.getAddress();
