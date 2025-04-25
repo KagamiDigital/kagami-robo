@@ -2,8 +2,7 @@ import * as logger from "./logger"
 import * as dotenv from "dotenv"
 import {io} from 'socket.io-client'
 const https_proxy_agent = require("https-proxy-agent");
-import { recoverSeedPhrase } from "./recover";
-import { base64ToMnemonic } from "./bip39";
+import { recoverMnemonic } from "./recover";
 
 dotenv.config();
 
@@ -33,13 +32,11 @@ import { RoboSignerStatus } from "./types/RoboSignerStatus";
 
 (async () => {
   try {
-    let seedPhrase = await recoverSeedPhrase();
-    console.log('Recovered seed phrase:', seedPhrase);
-    const mnemonic = base64ToMnemonic(seedPhrase); 
-    console.log('Mnemonic => : ', mnemonic); 
+    let mnemonic = await recoverMnemonic(); 
+    console.log('recovered mnemonic => : ', mnemonic); 
     // Use the seed phrase in your application
   } catch (error) {
-    console.error('Error recovering seed phrase:', error);
+    console.error('Error recovering mnemonic:', error);
   }
 })();
 

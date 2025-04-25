@@ -1,4 +1,5 @@
 from decrypt import kms_decrypt
+from mnemonic import Mnemonic
 
 def recover():
     """Recover seedphrase using CMK
@@ -10,6 +11,8 @@ def recover():
     with open("/app/keyId.txt", "r") as file:
         keyId = file.read()
     seed = kms_decrypt(cyphertext, keyId)
-    print("seed =>: ", seed)
 
-    return seed
+    mnemo = Mnemonic("english")
+    words = mnemo.to_mnemonic(binary_data)
+
+    return words
