@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from recover_mnemonic import recover
 import binascii
 
 if __name__ == "__main__":
