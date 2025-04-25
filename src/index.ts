@@ -35,8 +35,29 @@ import { RoboSignerStatus } from "./types/RoboSignerStatus";
     let seed = await recoverSeed(); 
     seed = seed.replace(/^b['"]|['"]$/g, '')
     console.log('recovered seed => : ', seed); 
-    ethers.utils.HDNode.fromSeed('0x'+seed)
-    // Use the seed phrase in your application
+
+    const hdNode = ethers.utils.HDNode.fromSeed('0x'+seed);
+    const wallets = [];
+    for (let i = 0; i < 3; i++) {
+      // Standard Ethereum derivation path with incrementing last number
+      const path = `m/44'/60'/0'/0/${i}`;
+      const wallet = hdNode.derivePath(path);
+      
+      wallets.push({
+        index: i,
+        path: path,
+        address: wallet.address,
+        privateKey: wallet.privateKey
+      });
+    }
+    for(let i = 0; i <= wallets.length ; i ++) {
+      const wallet = new ethers.Wallet(wallets[i].privateKey);
+      const signer = wallet.connect(provider);
+      const publicAddress = await signer.getAddress();
+      signers[publicAddress] = signer;
+      console.log(`Signer ${i + 1}`, publicAddress);
+      logger.info(`Signer ${i + 1}`, publicAddress)
+    }
   } catch (error) {
     console.error('Error recovering seed:', error);
   }
