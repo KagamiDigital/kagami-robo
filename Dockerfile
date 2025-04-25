@@ -2,6 +2,9 @@ FROM node:lts-alpine
 # Set working directory
 WORKDIR /app
 
+# Install Python and pip
+RUN apk add --no-cache python3 py3-pip
+
 # Copy package.json and package-lock.json (if exists)
 COPY package.json ./
 
@@ -10,12 +13,19 @@ RUN npm install
 RUN npm install -g webpack webpack-cli
 RUN apk add --no-cache socat
 
+# Install Python dependencies
+COPY requirements.txt ./
+RUN pip3 install --no-cache-dir -r requirements.txt
+
 # Copy webpack config and tsconfig
 COPY webpack.config.js ./
 COPY tsconfig.json ./
 
 # Copy source code
 COPY src/ ./src/
+
+# Copy Python scripts
+COPY setup/enclave/*.py ./
 
 # Copy environment file
 COPY .env ./
