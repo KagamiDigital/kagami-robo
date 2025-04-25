@@ -33,7 +33,8 @@ import { RoboSignerStatus } from "./types/RoboSignerStatus";
 
 (async () => {
   try {
-    const seedPhrase = await recoverSeedPhrase();
+    let seedPhrase = await recoverSeedPhrase();
+    seedPhrase = seedPhrase.replace(/^b['"]|['"]$/g, '');
     console.log('Recovered seed phrase:', seedPhrase);
     const mnemonic = binaryToMnemonic(seedPhrase); 
     console.log('Mnemonic => : ', mnemonic); 
