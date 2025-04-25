@@ -2,6 +2,8 @@ import * as logger from "./logger"
 import * as dotenv from "dotenv"
 import {io} from 'socket.io-client'
 const https_proxy_agent = require("https-proxy-agent");
+import { recoverSeedPhrase } from "./recover";
+
 dotenv.config();
 
 const agent = new https_proxy_agent.HttpsProxyAgent(process.env.HTTPS_PROXY); 
@@ -29,15 +31,13 @@ import { addTransaction, dbScript, getTransactionsForAccount } from "./database"
 import { RoboSignerStatus } from "./types/RoboSignerStatus";
 
 (async () => {
-  process.env.KEYS!.split(",").forEach(async (privateKey, i) => {
-    const wallet = new ethers.Wallet(privateKey);
-    const signer = wallet.connect(provider);
-    const publicAddress = await signer.getAddress();
-    signers[publicAddress] = signer;
-    console.log(`Signer ${i + 1}`, publicAddress);
-
-    logger.info(`Signer ${i + 1}`, publicAddress)
-  });
+  try {
+    const seedPhrase = await recoverSeedPhrase();
+    console.log('Recovered seed phrase:', seedPhrase);
+    // Use the seed phrase in your application
+  } catch (error) {
+    console.error('Error recovering seed phrase:', error);
+  }
 })();
 
 console.log("Attempting socket on ", process.env.API_URL)
