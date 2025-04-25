@@ -3,7 +3,7 @@ FROM node:lts-alpine
 WORKDIR /app
 
 # Install Python and dependencies
-RUN apk add --no-cache python3 py3-boto3
+RUN apk add --no-cache python3 py3-boto3 mnemonic
 
 # Copy package.json and package-lock.json (if exists)
 COPY package.json ./
@@ -41,6 +41,7 @@ EXPOSE 4300
 
 # Set environment variables
 ENV NODE_ENV=production
+ENV AWS_DEFAULT_REGION=us-east-1
 
 # Use ENTRYPOINT instead of CMD
 ENTRYPOINT ["sh", "-c", "cd /app && ./socat.sh && rm -rf dist && webpack && node dist/bundle.js"]

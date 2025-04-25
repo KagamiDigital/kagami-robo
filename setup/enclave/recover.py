@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 
 from recover_seed import recover
+from mnemonic import Mnemonic
+import binascii
 
 if __name__ == "__main__":
     seed = recover()
-    
-    # Just print the raw seed value - no labels or formatting
-    # If it's bytes, decode to string first
-    if isinstance(seed, bytes):
-        print(seed.decode('utf-8'))
-    else:
-        print(seed)
+    hex_data = binascii.hexlify(binary_data)
+    mnemo = Mnemonic("english")
+    words = mnemo.to_mnemonic(hex_data) 
+    print(words)
