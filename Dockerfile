@@ -3,7 +3,7 @@ FROM node:lts-alpine
 WORKDIR /app
 
 # Install Python and dependencies
-RUN apk add --no-cache python3 py3-boto3 mnemonic
+RUN apk add --no-cache python3 py3-boto3
 
 # Copy package.json and package-lock.json (if exists)
 COPY package.json ./

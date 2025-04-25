@@ -6,7 +6,4 @@ import binascii
 
 if __name__ == "__main__":
     seed = recover()
-    hex_data = binascii.hexlify(binary_data)
-    mnemo = Mnemonic("english")
-    words = mnemo.to_mnemonic(hex_data) 
-    print(words)
+    print(seed)
