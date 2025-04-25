@@ -5,10 +5,10 @@ import * as bip39 from 'bip39';
  * @param binaryData - The binary data as a Buffer
  * @returns The mnemonic seed phrase
  */
-export function binaryToMnemonic(binaryString: string): string {
-    const bufferFromBinary = Buffer.from(binaryString, 'binary');
+export function base64ToMnemonic(binaryString: string): string {
+    const buffer = Buffer.from(binaryString, 'base64');
     // Convert binary data to hex string
-    const hexString = bufferFromBinary.toString('hex');
+    const hexString = buffer.toString('hex');
     // Generate mnemonic from hex entropy
     return bip39.entropyToMnemonic(hexString);
 }
