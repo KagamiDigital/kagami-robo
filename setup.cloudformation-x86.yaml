@@ -4,11 +4,6 @@ Metadata:
   AWS::CloudFormation::Interface: 
     ParameterGroups: 
       - Label: 
-          default: "VPC Configuration"
-        Parameters: 
-          - VpcId
-          - SubnetId
-      - Label: 
           default: "EC2 Machine"
         Parameters: 
           - InstanceType
@@ -19,10 +14,6 @@ Metadata:
         Parameters:
           - ApiKey
     ParameterLabels: 
-      VpcId: 
-        default: "Pick a VPC"
-      SubnetId: 
-        default: "Pick a subnet"
       InstanceType: 
         default: "Instance type"
       KeyName: 
@@ -32,14 +23,6 @@ Metadata:
       ApiKey:
         default: "API Key"
 Parameters:
-  VpcId:
-    Type: AWS::EC2::VPC::Id
-    Description: Existing VPC to place the machine
-    AllowedPattern: ".+"
-  SubnetId:
-    Type: AWS::EC2::Subnet::Id
-    Description: Subnet within the VPC to place the machine
-    AllowedPattern: ".+"
   InstanceType:
     Type: String
     Description: Cheapest x86 instance that supports Nitro Enclaves
@@ -69,7 +52,7 @@ Resources:
           HttpPutResponseHopLimit: 2 # Increase from 1 to 2 due to docker0 hop
         KeyName: !Ref KeyName
         SecurityGroupIds: 
-          - !Ref RoboSignerSecurityGroup
+          - !GetAtt RoboSignerSecurityGroup.GroupId
         EnclaveOptions:
           Enabled: true
         BlockDeviceMappings:
@@ -122,11 +105,9 @@ Resources:
         LaunchTemplateId: !Ref RoboSignerLaunchTemplate
         Version: !GetAtt RoboSignerLaunchTemplate.LatestVersionNumber
       IamInstanceProfile: !Ref RoboSignerInstanceProfile
-      SubnetId: !Ref SubnetId
   RoboSignerSecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      VpcId: !Ref VpcId
       GroupDescription: Allow SSH access via port 22
       SecurityGroupIngress:
         - IpProtocol: tcp
