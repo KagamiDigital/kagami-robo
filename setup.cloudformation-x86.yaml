@@ -13,6 +13,7 @@ Metadata:
           default: "Application Configuration"
         Parameters:
           - ApiKey
+          - PublicKey
     ParameterLabels: 
       InstanceType: 
         default: "Instance type"
@@ -22,6 +23,8 @@ Metadata:
         default: "AMI to use"
       ApiKey:
         default: "API Key"
+      PublicKey:
+        default: "Onwer Public Key"
 Parameters:
   InstanceType:
     Type: String
@@ -42,6 +45,11 @@ Parameters:
     Description: API Key for the application
     NoEcho: true
     AllowedPattern: ".+"
+  PublicKey:
+    Type: String
+    Description: Owner's Public Key for recovery
+    NoEcho: true
+    AllowedPattern: "^(0x)?[0-9a-fA-F]{128}$"
 Resources:
   RoboSignerLaunchTemplate: 
     Type: AWS::EC2::LaunchTemplate
@@ -86,7 +94,7 @@ Resources:
               cd setup/ec2
               pip3 install --no-cache-dir -r requirements.txt
               export AWS_DEFAULT_REGION=us-east-1
-              python3 bootstrap.py
+              python3 bootstrap.py "${PublicKey}"
               cd ../..
               sudo mv .env.sample .env
               sed -i 's/API_KEY="your API key goes here"/API_KEY="'"${ApiKey}"'"/' /home/ec2-user/kagami-robo/.env

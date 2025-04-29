@@ -24,7 +24,7 @@ cyphertext = kms_encrypt(seed, keyId)
 with open("seed.txt", "wb") as file:
     file.write(cyphertext)
 
-#public_key = sys.argv[2]
+#public_key = sys.argv[1]
 #pubKeyHex = public_key.to_hex()
 #encrypted_seed = encrypt(pubKeyHex, plaintext)
 
