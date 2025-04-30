@@ -13,6 +13,8 @@ export function getRPCNodeFromNetworkId(networkId:string) {
         return process.env.BASE_SEPOLIA_NODE_URL; 
     } else if (networkId === '50312') {
         return process.env.SOMNIA_SHANNON_NODE_URL;
+    } else if (networkId === '421614') {
+        return process.env.ORCHESTRATION_NODE_URL;
     } else {
         return ''; 
     }
