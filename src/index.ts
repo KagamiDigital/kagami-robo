@@ -20,7 +20,7 @@ import {
   combineSignedTx,
   getUserRegistrationAllInfos,
   getUserPreRegisterInfos,
-} from "@intuweb3/exp-node";
+} from "@intuweb3/sdk";
 import { getRPCNodeFromNetworkId, rebuildTransactionRecordsForAccount } from "./utils";
 import { addTransaction, dbScript, getTransactionsForAccount } from "./database";
 import { RoboSignerStatus } from "./types/RoboSignerStatus";
