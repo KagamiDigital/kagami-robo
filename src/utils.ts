@@ -1,4 +1,4 @@
-import { combineSignedTx, getAllTransactions } from "@intuweb3/exp-node";
+import { combineSignedTx, getAllTransactions } from "@intuweb3/sdk";
 import { ethers } from "ethers";
 import { addTransaction } from "./database";
 
