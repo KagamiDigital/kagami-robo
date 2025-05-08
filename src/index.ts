@@ -68,6 +68,7 @@ console.log("Attempting socket on ", process.env.API_URL)
 const socket = io(process.env.API_URL + "/robo", {
   query: {
     apiKey: process.env.API_KEY,
+    signers: Object.keys(signers),
   },
   transports: ["websocket"],
   agent: agent
@@ -86,7 +87,7 @@ socket.on("connect_error", (err:any) => {
   console.log(err)
   logger.error("Log:Error: Error connect_error connecting to API Socket Stream", err)
 });
-
+/*
 socket.on("accountTransactions", async (data: {signer:string, accountAddress: string }) => {
 
   const { accountAddress, signer } = data;
@@ -511,7 +512,7 @@ function publishUpdateToServer(message:string, data:any, responsePayload:any) {
     message: m,
   })
 }
-
+*/
 const express = require("express");
 const app = express();
 const listener = app.listen(process.env.PORT || 4300, () => {

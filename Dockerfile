@@ -11,7 +11,7 @@ COPY package.json ./
 # Install dependencies
 RUN npm install
 RUN npm install -g webpack webpack-cli
-RUN apk add --no-cache socat
+#RUN apk add --no-cache socat
 
 # Copy webpack config and tsconfig
 COPY webpack.config.js ./
@@ -33,8 +33,8 @@ COPY setup/ec2/seed.txt ./
 COPY .env ./
 
 # Copy socat setup
-COPY socat.sh ./
-RUN chmod +x /app/socat.sh
+#COPY socat.sh ./
+#RUN chmod +x /app/socat.sh
 
 # Expose the port your app runs on (adjust if needed)
 EXPOSE 4300
