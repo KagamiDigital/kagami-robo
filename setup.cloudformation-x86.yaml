@@ -98,7 +98,6 @@ Resources:
               cd ../..
               sudo mv .env.sample .env
               sed -i 's/API_KEY="your API key goes here"/API_KEY="'"${ApiKey}"'"/' /home/ec2-user/kagami-robo/.env
-              sed -i 's/API_URL="http://localhost:4200"/API_URL="'"https://robonet.salt.space/api"'"/' /home/ec2-user/kagami-robo/.env
               make build-docker
               make build-enclave
               make update-pcr
