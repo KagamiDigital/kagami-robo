@@ -11,7 +11,6 @@ COPY package.json ./
 # Install dependencies
 RUN npm install
 RUN npm install -g webpack webpack-cli
-#RUN apk add --no-cache socat
 
 # Copy webpack config and tsconfig
 COPY webpack.config.js ./
@@ -32,10 +31,6 @@ COPY setup/ec2/seed.txt ./
 # Copy environment file
 COPY .env ./
 
-# Copy socat setup
-#COPY socat.sh ./
-#RUN chmod +x /app/socat.sh
-
 # Expose the port your app runs on (adjust if needed)
 EXPOSE 4300
 
@@ -44,4 +39,4 @@ ENV NODE_ENV=production
 ENV AWS_DEFAULT_REGION=us-east-1
 
 # Use ENTRYPOINT instead of CMD
-ENTRYPOINT ["sh", "-c", "cd /app && ./socat.sh && rm -rf dist && webpack && node dist/bundle.js"]
+ENTRYPOINT ["sh", "-c", "cd /app && rm -rf dist && webpack && node dist/bundle.js"]
