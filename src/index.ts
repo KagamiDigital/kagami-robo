@@ -25,7 +25,7 @@ import {
   combineSignedTx,
   getUserRegistrationAllInfos,
   getUserPreRegisterInfos,
-} from "@intuweb3/exp-node";
+} from "@intuweb3/sdk";
 import { getRPCNodeFromNetworkId, rebuildTransactionRecordsForAccount } from "./utils";
 import { addTransaction, dbScript, getTransactionsForAccount } from "./database";
 import { RoboSignerStatus } from "./types/RoboSignerStatus";
@@ -87,7 +87,7 @@ socket.on("connect_error", (err:any) => {
   console.log(err)
   logger.error("Log:Error: Error connect_error connecting to API Socket Stream", err)
 });
-/*
+
 socket.on("accountTransactions", async (data: {signer:string, accountAddress: string }) => {
 
   const { accountAddress, signer } = data;
@@ -512,7 +512,7 @@ function publishUpdateToServer(message:string, data:any, responsePayload:any) {
     message: m,
   })
 }
-*/
+
 const express = require("express");
 const app = express();
 const listener = app.listen(process.env.PORT || 4300, () => {

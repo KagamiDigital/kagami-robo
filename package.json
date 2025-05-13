@@ -6,13 +6,13 @@
   "scripts": {
     "start": "rm -rf dist && webpack && node dist/bundle.js",
     "buildwebpack": "rm -rf dist && webpack",
-    "nodev": "node --version"
+    "nodev": "node --version",
+    "debug": "node dist/bundle.js --debugger"
   },
   "dependencies": {
-    "@intuweb3/exp-node": "^0.99.954",
+    "@intuweb3/sdk": "^0.0.42",
     "@types/sqlite3": "^3.1.11",
     "assert-browserify": "^2.0.0",
-    "buffer-browserify": "^0.2.5",
     "bufferutil": "^4.0.8",
     "crypto-browserify": "^3.12.0",
     "dotenv": "^16.4.5",
