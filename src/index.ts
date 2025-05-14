@@ -3,20 +3,6 @@ import * as dotenv from "dotenv"
 import {io} from 'socket.io-client'
 const https_proxy_agent = require("https-proxy-agent");
 import { recoverSeed } from "./recover";
-
-dotenv.config();
-
-const agent = new https_proxy_agent.HttpsProxyAgent(process.env.HTTPS_PROXY); 
-
-import { ethers } from "ethers";
-const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true, fetchOptions: {agent: agent}});
-const signers: { [index: string]: ethers.Wallet } = {};
-
-( async () => {
-  console.log('running db script'); 
-  dbScript();
-})(); 
-
 import {
   preRegistration,
   automateRegistration,
@@ -29,6 +15,27 @@ import {
 import { getRPCNodeFromNetworkId, rebuildTransactionRecordsForAccount } from "./utils";
 import { addTransaction, dbScript, getTransactionsForAccount } from "./database";
 import { RoboSignerStatus } from "./types/RoboSignerStatus";
+
+dotenv.config();
+
+const agent = new https_proxy_agent.HttpsProxyAgent(process.env.HTTPS_PROXY); 
+
+import { ethers } from "ethers";
+const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true, fetchOptions: {agent: agent}});
+const signers: { [index: string]: ethers.Wallet } = {};
+
+const socket = io(process.env.API_URL + "/robo", {
+  query: {
+    apiKey: process.env.API_KEY
+  },
+  transports: ["websocket"],
+  agent: agent
+});
+
+( async () => {
+  console.log('running db script'); 
+  dbScript();
+})(); 
 
 (async () => {
   try {
@@ -58,21 +65,17 @@ import { RoboSignerStatus } from "./types/RoboSignerStatus";
       console.log(`Signer ${i + 1}`, publicAddress);
       logger.info(`Signer ${i + 1}`, publicAddress)
     }
+
+    // send the signers array via websocket
+    if(socket) {
+
+    }
   } catch (error) {
     console.error('Error recovering seed:', error);
   }
 })();
 
 console.log("Attempting socket on ", process.env.API_URL)
-
-const socket = io(process.env.API_URL + "/robo", {
-  query: {
-    apiKey: process.env.API_KEY,
-    signers: Object.keys(signers),
-  },
-  transports: ["websocket"],
-  agent: agent
-});
 
 socket.on("connect", () => {
   console.log(`Connected to server URL : ${process.env.API_URL}`)
