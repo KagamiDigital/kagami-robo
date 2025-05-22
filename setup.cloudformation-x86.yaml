@@ -94,10 +94,11 @@ Resources:
               cd setup/ec2
               pip3 install --no-cache-dir -r requirements.txt
               export AWS_DEFAULT_REGION=us-east-1
-              python3 bootstrap.py "${PublicKey}"
+              python3 bootstrap.py
               cd ../..
               sudo mv .env.sample .env
               sed -i 's/API_KEY="your API key goes here"/API_KEY="'"${ApiKey}"'"/' /home/ec2-user/kagami-robo/.env
+              sed -i 's/PUBLIC_KEY="your public key goes here"/PUBLIC_KEY="'"${PublicKey}"'"/' /home/ec2-user/kagami-robo/.env
               make build-docker
               make build-enclave
               make update-pcr

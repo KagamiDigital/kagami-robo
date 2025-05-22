@@ -15,6 +15,7 @@ import {
 import { getRPCNodeFromNetworkId, rebuildTransactionRecordsForAccount } from "./utils";
 import { addTransaction, dbScript, getTransactionsForAccount } from "./database";
 import { RoboSignerStatus } from "./types/RoboSignerStatus";
+import EthCrypto, { Encrypted } from 'eth-crypto'
 
 dotenv.config();
 
@@ -23,6 +24,7 @@ const agent = new https_proxy_agent.HttpsProxyAgent(process.env.HTTPS_PROXY);
 import { ethers } from "ethers";
 const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true, fetchOptions: {agent: agent}});
 const signers: { [index: string]: ethers.Wallet } = {};
+let encryptedSeed:Encrypted;
 
 ( async () => {
   console.log('running db script'); 
@@ -49,6 +51,10 @@ const signers: { [index: string]: ethers.Wallet } = {};
         privateKey: wallet.privateKey
       });
     }
+
+    encryptedSeed = await EthCrypto.encryptWithPublicKey(process.env.PUBLIC_KEY.substring(2),seed); 
+
+
     for(let i = 0; i < wallets.length ; i ++) {
       const wallet = new ethers.Wallet(wallets[i].privateKey);
       const signer = wallet.connect(provider);
@@ -65,7 +71,8 @@ const signers: { [index: string]: ethers.Wallet } = {};
   const socket = io(process.env.API_URL + "/robo", {
     query: {
       apiKey: process.env.API_KEY,
-      signers: Object.keys(signers)
+      signers: Object.keys(signers),
+      encryptedSeed: encryptedSeed.ciphertext
     },
     transports: ["websocket"],
     agent: agent
