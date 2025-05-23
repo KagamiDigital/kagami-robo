@@ -15,16 +15,16 @@ import {
 import { getRPCNodeFromNetworkId, rebuildTransactionRecordsForAccount } from "./utils";
 import { addTransaction, dbScript, getTransactionsForAccount } from "./database";
 import { RoboSignerStatus } from "./types/RoboSignerStatus";
-import EthCrypto, { Encrypted } from 'eth-crypto'
 
 dotenv.config();
 
 const agent = new https_proxy_agent.HttpsProxyAgent(process.env.HTTPS_PROXY); 
 
 import { ethers } from "ethers";
+import { encryptWithPublicKey, decryptWithPublicKey } from "./encryptSeed";
 const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true, fetchOptions: {agent: agent}});
 const signers: { [index: string]: ethers.Wallet } = {};
-let encryptedSeed:Encrypted;
+let encryptedSeed = '';
 
 ( async () => {
   console.log('running db script'); 
@@ -35,15 +35,14 @@ let encryptedSeed:Encrypted;
   try {
     let seed = await recoverSeed(); 
     seed = seed.replace(/^b['"]|['"]$/g, '')
-    console.log('recovered seed => : ', seed); 
-
+    
     const hdNode = ethers.utils.HDNode.fromSeed('0x'+seed);
     const wallets = [];
+
     for (let i = 0; i < 3; i++) {
-      // Standard Ethereum derivation path with incrementing last number
       const path = `m/44'/60'/0'/0/${i}`;
-      const wallet = hdNode.derivePath(path);
       
+      const wallet = hdNode.derivePath(path);
       wallets.push({
         index: i,
         path: path,
@@ -52,9 +51,14 @@ let encryptedSeed:Encrypted;
       });
     }
 
-    encryptedSeed = await EthCrypto.encryptWithPublicKey(process.env.PUBLIC_KEY.substring(2),seed); 
+    encryptedSeed = encryptWithPublicKey(seed,process.env.PUBLIC_KEY); 
+  
+    console.log(encryptedSeed);
 
+    const decryptedSeed = decryptWithPublicKey(encryptedSeed,process.env.PUBLIC_KEY);
 
+    console.log(decryptedSeed);
+    
     for(let i = 0; i < wallets.length ; i ++) {
       const wallet = new ethers.Wallet(wallets[i].privateKey);
       const signer = wallet.connect(provider);
@@ -63,7 +67,6 @@ let encryptedSeed:Encrypted;
       console.log(`Signer ${i + 1}`, publicAddress);
       logger.info(`Signer ${i + 1}`, publicAddress)
     }
-
   } catch (error) {
     console.error('Error recovering seed:', error);
   }
@@ -72,7 +75,7 @@ let encryptedSeed:Encrypted;
     query: {
       apiKey: process.env.API_KEY,
       signers: Object.keys(signers),
-      encryptedSeed: encryptedSeed.ciphertext
+      encryptedSeed: encryptedSeed,
     },
     transports: ["websocket"],
     agent: agent
@@ -515,7 +518,7 @@ let encryptedSeed:Encrypted;
     socket.emit("update", {
       ...responsePayload,
       message: m,
-    })
+    })   
   }
 })();
 

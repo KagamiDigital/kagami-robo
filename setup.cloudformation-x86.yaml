@@ -7,7 +7,6 @@ Metadata:
           default: "EC2 Machine"
         Parameters: 
           - InstanceType
-          - KeyName
           - LatestAmiId
       - Label:
           default: "Application Configuration"
@@ -17,8 +16,6 @@ Metadata:
     ParameterLabels: 
       InstanceType: 
         default: "Instance type"
-      KeyName: 
-        default: "SSH key"
       LatestAmiId: 
         default: "AMI to use"
       ApiKey:
@@ -30,10 +27,6 @@ Parameters:
     Type: String
     Description: Cheapest x86 instance that supports Nitro Enclaves
     Default: c6a.xlarge
-    AllowedPattern: ".+"
-  KeyName:
-    Description: SSH Keypair to login to the instance
-    Type: AWS::EC2::KeyPair::KeyName
     AllowedPattern: ".+"
   LatestAmiId:
     Description: Amazon Linux 2023 x86 AMI for us-east1 Region
@@ -58,7 +51,6 @@ Resources:
       LaunchTemplateData:
         MetadataOptions:
           HttpPutResponseHopLimit: 2 # Increase from 1 to 2 due to docker0 hop
-        KeyName: !Ref KeyName
         SecurityGroupIds: 
           - !GetAtt RoboSignerSecurityGroup.GroupId
         EnclaveOptions:
