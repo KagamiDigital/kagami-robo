@@ -12,7 +12,7 @@ Metadata:
           default: "Application Configuration"
         Parameters:
           - ApiKey
-          - PublicKey
+          - Signature
     ParameterLabels: 
       InstanceType: 
         default: "Instance type"
@@ -20,8 +20,8 @@ Metadata:
         default: "AMI to use"
       ApiKey:
         default: "API Key"
-      PublicKey:
-        default: "Onwer Public Key"
+      Signature:
+        default: "Onwer signature"
 Parameters:
   InstanceType:
     Type: String
@@ -38,11 +38,11 @@ Parameters:
     Description: API Key for the application
     NoEcho: true
     AllowedPattern: ".+"
-  PublicKey:
+  Signature:
     Type: String
-    Description: Owner's Public Key for recovery
+    Description: Owner's signature for recovery
     NoEcho: true
-    AllowedPattern: "^(0x)?[0-9a-fA-F]{64}$"
+    AllowedPattern: ".+"
 Resources:
   RoboSignerLaunchTemplate: 
     Type: AWS::EC2::LaunchTemplate
@@ -90,7 +90,7 @@ Resources:
               cd ../..
               sudo mv .env.sample .env
               sed -i 's/API_KEY="your API key goes here"/API_KEY="'"${ApiKey}"'"/' /home/ec2-user/kagami-robo/.env
-              sed -i 's/PUBLIC_KEY="your public key goes here"/PUBLIC_KEY="'"${PublicKey}"'"/' /home/ec2-user/kagami-robo/.env
+              sed -i 's/SIGNATURE="your signature goes here"/SIGNATURE="'"${Signature}"'"/' /home/ec2-user/kagami-robo/.env
               make build-docker
               make build-enclave
               make update-pcr

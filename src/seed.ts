@@ -1,10 +1,10 @@
 import crypto from 'crypto';
 
-export function encryptWithPublicKey(data:string, publicKey:string) {
+export function encryptWithSignature(data:string, signature:string) {
   try {
     const aesKey = crypto.createHash('sha256')
       .update('SEEDPHRASE_ENCRYPTION_SALT_V1') // Add a salt for domain separation
-      .update(publicKey, 'hex')
+      .update(signature, 'hex')
       .digest();
 
     const iv = crypto.randomBytes(16);
@@ -21,7 +21,7 @@ export function encryptWithPublicKey(data:string, publicKey:string) {
   }
 }
 
-export function decryptWithPublicKey(encryptedData:string, publicKey:string) {
+export function decryptWithSignature(encryptedData:string, signature:string) {
   try {
     // Split IV and encrypted data
     const [ivHex, encrypted] = encryptedData.split(':');
@@ -30,7 +30,7 @@ export function decryptWithPublicKey(encryptedData:string, publicKey:string) {
     // Derive the same AES key
     const aesKey = crypto.createHash('sha256')
       .update('SEEDPHRASE_ENCRYPTION_SALT_V1')
-      .update(publicKey, 'hex')
+      .update(signature, 'hex')
       .digest();
     
     // Decrypt

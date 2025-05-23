@@ -21,7 +21,7 @@ dotenv.config();
 const agent = new https_proxy_agent.HttpsProxyAgent(process.env.HTTPS_PROXY); 
 
 import { ethers } from "ethers";
-import { encryptWithPublicKey, decryptWithPublicKey } from "./encryptSeed";
+import { encryptWithSignature, decryptWithSignature } from "./seed";
 const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true, fetchOptions: {agent: agent}});
 const signers: { [index: string]: ethers.Wallet } = {};
 let encryptedSeed = '';
@@ -33,6 +33,7 @@ let encryptedSeed = '';
 
 (async () => {
   try {
+
     let seed = await recoverSeed(); 
     seed = seed.replace(/^b['"]|['"]$/g, '')
     
@@ -51,11 +52,11 @@ let encryptedSeed = '';
       });
     }
 
-    encryptedSeed = encryptWithPublicKey(seed,process.env.PUBLIC_KEY); 
+    encryptedSeed = encryptWithSignature(seed,process.env.SIGNATURE); 
   
     console.log(encryptedSeed);
 
-    const decryptedSeed = decryptWithPublicKey(encryptedSeed,process.env.PUBLIC_KEY);
+    const decryptedSeed = decryptWithSignature(encryptedSeed,process.env.SIGNATURE);
 
     console.log(decryptedSeed);
     
