@@ -442,9 +442,6 @@ socket.on(
 
       responsePayload.txReceipt = txReceipt;
 
-      // add the transaction to the db
-      addTransaction(accountAddress, Number(txId), networkId,txReceipt.transactionHash); 
- 
       publishUpdateToServer(`SaltRobos: broadcastTransaction:sendTx:success:${signer} => response`, {}, { responsePayload,txReceipt })
 
       socket.emit("transactionBroadcastingComplete", {
@@ -452,7 +449,26 @@ socket.on(
         success: true,
         error: null,
       });
-
+      let block:ethers.providers.Block; 
+      try {
+        block = await _provider.getBlock(txReceipt.blockHash); 
+      } catch(err) {
+        logger.error(`Log:Error: Error broadcastTransaction:getBlock:failure:${txReceipt.transactionHash}`, err);
+      }
+      // add the transaction to the db
+      addTransaction(
+        accountAddress, 
+        Number(txId), 
+        networkId,
+        txReceipt.transactionHash, 
+        txReceipt.from, 
+        txReceipt.to, 
+        txReceipt.status ?? 0,
+        txResponse.value.toString(), 
+        txReceipt.effectiveGasPrice.toString(), 
+        txReceipt.gasUsed.toString(), 
+        block ? block.timestamp*1000 : Date.now(),
+      );
     } catch (error) {
 
       publishUpdateToServer(`SaltRobos:Error: broadcastTransaction:sendTx:failure:${signer} => error`, {error}, responsePayload)

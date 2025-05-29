@@ -26,7 +26,7 @@ export async function rebuildTransactionRecordsForAccount(signer: ethers.Signer,
         try {
             const signedTx = await combineSignedTx(accountAddress,transactions[i].id,signer); 
             const txHash = ethers.utils.keccak256(signedTx); 
-            addTransaction(accountAddress,Number(transactions[i].id),transactions[i].chainId,txHash); 
+            addTransaction(accountAddress,Number(transactions[i].id),transactions[i].chainId,txHash,null,null,null,null,null,null,null); 
         } catch(err) { // not enough signatures to combine, incomplete tx
             console.log(err); 
         }
