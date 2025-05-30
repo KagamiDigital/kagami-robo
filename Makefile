@@ -14,7 +14,6 @@ update-pcr:
     INSTANCE_PROFILE_NAME=$$(echo $$INSTANCE_PROFILE_ARN | sed 's/.*instance-profile\///' | sed 's/\/.*//') && \
     ROLE_NAME=$$(aws iam get-instance-profile --instance-profile-name $$INSTANCE_PROFILE_NAME --query "InstanceProfile.Roles[0].RoleName" --output text) && \
     aws iam put-role-policy --role-name $$ROLE_NAME --policy-name KMSEnclavePermissions --policy-document file://pcr-policy-stub.json
-	aws iam attach-role-policy --role-name $$ROLE_NAME --policy-arn arn:aws:iam::aws:policy/AmazonSSMFullAccess
 	
 run-enclave:
 	sudo enclaver run --publish 4300:4300 robos:enclave-latest

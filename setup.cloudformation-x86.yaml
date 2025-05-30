@@ -146,7 +146,6 @@ Resources:
                   - 'iam:GetRolePolicy'
                   - 'iam:GetInstanceProfile'
                   - 'iam:PutRolePolicy'
-                  - 'iam:AttachRolePolicy'
                 Resource: "*"
   RoboSignerInstanceProfile:
     Type: "AWS::IAM::InstanceProfile"
