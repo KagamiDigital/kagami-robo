@@ -12,7 +12,7 @@ Metadata:
           default: "Application Configuration"
         Parameters:
           - ApiKey
-          - Signature
+          - PublicKey
     ParameterLabels: 
       InstanceType: 
         default: "Instance type"
@@ -20,8 +20,8 @@ Metadata:
         default: "AMI to use"
       ApiKey:
         default: "API Key"
-      Signature:
-        default: "Onwer signature"
+      PublicKey:
+        default: "Onwer Public Key"
 Parameters:
   InstanceType:
     Type: String
@@ -38,11 +38,11 @@ Parameters:
     Description: API Key for the application
     NoEcho: true
     AllowedPattern: ".+"
-  Signature:
+  PublicKey:
     Type: String
-    Description: Owner's signature for recovery
+    Description: Owner's Public Key for recovery
     NoEcho: true
-    AllowedPattern: ".+"
+    AllowedPattern: "^(0x)?[0-9a-fA-F]{64}$"
 Resources:
   RoboSignerLaunchTemplate: 
     Type: AWS::EC2::LaunchTemplate
@@ -80,17 +80,16 @@ Resources:
               sudo dnf install -y make
               cd /home/ec2-user
               git clone https://github.com/KagamiDigital/kagami-robo.git
-              cd kagami-robo
+              cd kagami-robo 
               git config --global --add safe.directory /kagami-robo
               git checkout enclave
               cd setup/ec2
               pip3 install --no-cache-dir -r requirements.txt
               export AWS_DEFAULT_REGION=us-east-1
-              python3 bootstrap.py
+              python3 bootstrap.py "${PublicKey}"
               cd ../..
               sudo mv .env.sample .env
               sed -i 's/API_KEY="your API key goes here"/API_KEY="'"${ApiKey}"'"/' /home/ec2-user/kagami-robo/.env
-              sed -i 's/SIGNATURE="your signature goes here"/SIGNATURE="'"${Signature}"'"/' /home/ec2-user/kagami-robo/.env
               make build-docker
               make build-enclave
               make update-pcr

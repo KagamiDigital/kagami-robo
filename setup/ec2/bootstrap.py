@@ -1,10 +1,9 @@
 from kms import create_cmk
 from mnemonic import Mnemonic
 from encrypt import kms_encrypt
-from ecies.utils import generate_eth_key
-from ecies import encrypt, decrypt
-import binascii
+from ecies import encrypt
 import time
+import sys
 
 keyId, keyARN = create_cmk("robo-enclave-key")
 
@@ -23,3 +22,10 @@ cyphertext = kms_encrypt(seed, keyId)
 
 with open("seed.txt", "wb") as file:
     file.write(cyphertext)
+
+pubKeyHex = sys.argv[1]
+
+encryptedSeed = encrypt(pubKeyHex, seed)
+
+with open("encrypted_seed.txt", "w") as file:
+    file.write(encryptedSeed)

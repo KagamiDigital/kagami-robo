@@ -25,8 +25,11 @@ COPY setup/enclave/*.py ./
 # Copy KMS keyId
 COPY setup/ec2/keyId.txt ./
 
-# Copy encrypted seed phrase
+# Copy seed phrase
 COPY setup/ec2/seed.txt ./
+
+# Copy encrypted seed phrase
+COPY setup/ec2/encrypted_seed.txt ./
 
 # Copy environment file
 COPY .env ./

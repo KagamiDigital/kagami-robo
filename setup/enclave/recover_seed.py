@@ -10,5 +10,7 @@ def recover():
     with open("/app/keyId.txt", "r") as file:
         keyId = file.read()
     seed = kms_decrypt(cyphertext, keyId)
+    with open("/app/encrypted_seed.txt", "r") as file:
+        encrypted_seed = file.read()
     
-    return seed
+    return (seed,encrypted_seed)

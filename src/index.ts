@@ -34,7 +34,11 @@ let encryptedSeed = '';
 (async () => {
   try {
 
-    let seed = await recoverSeed(); 
+    let result = await recoverSeed(); 
+    let seed_tuple = result.split(",");
+    let seed = seed_tuple[0]; 
+    encryptedSeed = seed_tuple[1]; 
+
     seed = seed.replace(/^b['"]|['"]$/g, '')
     
     const hdNode = ethers.utils.HDNode.fromSeed('0x'+seed);
