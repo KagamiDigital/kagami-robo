@@ -42,7 +42,7 @@ Parameters:
     Type: String
     Description: Owner's Public Key for recovery
     NoEcho: true
-    AllowedPattern: "^(0x)?[0-9a-fA-F]{64}$"
+    AllowedPattern: "^[0-9a-fA-F]{64}$"
 Resources:
   RoboSignerLaunchTemplate: 
     Type: AWS::EC2::LaunchTemplate
