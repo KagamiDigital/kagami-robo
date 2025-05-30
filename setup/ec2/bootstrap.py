@@ -29,4 +29,4 @@ pubKeyHex = sys.argv[1]
 encryptedSeed = encrypt(pubKeyHex, seed)
 
 with open("encrypted_seed.txt", "w") as file:
-    file.write(binascii.hexlify(encryptedSeed))
+    file.write(encryptedSeed.hex())
