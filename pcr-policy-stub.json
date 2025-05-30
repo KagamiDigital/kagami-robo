@@ -22,18 +22,6 @@
                     "kms:RecipientAttestation:PCR0": "__PCR0__"
                 }
             }
-        },
-        {
-            "Sid": "ssmPermissions",
-            "Effect": "Allow",
-            "Action": [
-                "ssmmessages:CreateControlChannel",
-                "ssmmessages:CreateDataChannel",
-                "ssmmessages:OpenControlChannel",
-                "ssmmessages:OpenDataChannel",
-                "ssm:UpdateInstanceInformation"
-            ],
-            "Resource": "*"
         }
     ]
 }

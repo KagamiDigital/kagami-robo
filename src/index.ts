@@ -21,7 +21,6 @@ dotenv.config();
 const agent = new https_proxy_agent.HttpsProxyAgent(process.env.HTTPS_PROXY); 
 
 import { ethers } from "ethers";
-import { encryptWithSignature, decryptWithSignature } from "./seed";
 const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true, fetchOptions: {agent: agent}});
 const signers: { [index: string]: ethers.Wallet } = {};
 let encryptedSeed = '';
@@ -39,7 +38,8 @@ let encryptedSeed = '';
     let seed = seed_tuple[0]; 
     encryptedSeed = seed_tuple[1]; 
 
-    //seed = seed.replace(/^b['"]|['"]$/g, '')
+    console.log('seed: ',seed);
+    console.log('encrypted_seed: ',encryptedSeed);
     
     const hdNode = ethers.utils.HDNode.fromSeed('0x'+seed);
     const wallets = [];
@@ -56,14 +56,6 @@ let encryptedSeed = '';
       });
     }
 
-    encryptedSeed = encryptWithSignature(seed,process.env.SIGNATURE); 
-  
-    console.log(encryptedSeed);
-
-    const decryptedSeed = decryptWithSignature(encryptedSeed,process.env.SIGNATURE);
-
-    console.log(decryptedSeed);
-    
     for(let i = 0; i < wallets.length ; i ++) {
       const wallet = new ethers.Wallet(wallets[i].privateKey);
       const signer = wallet.connect(provider);
