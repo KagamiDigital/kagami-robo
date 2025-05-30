@@ -4,6 +4,7 @@ from encrypt import kms_encrypt
 from ecies import encrypt
 import time
 import sys
+import binascii
 
 keyId, keyARN = create_cmk("robo-enclave-key")
 
@@ -28,4 +29,4 @@ pubKeyHex = sys.argv[1]
 encryptedSeed = encrypt(pubKeyHex, seed)
 
 with open("encrypted_seed.txt", "w") as file:
-    file.write(encryptedSeed)
+    file.write(binascii.hexlify(encryptedSeed))
