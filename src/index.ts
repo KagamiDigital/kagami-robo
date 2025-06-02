@@ -11,6 +11,10 @@ import {
   combineSignedTx,
   getUserRegistrationAllInfos,
   getUserPreRegisterInfos,
+  preRegistrationWithProxyUrl,
+  automateRegistrationWithProxyUrl,
+  registerAllStepsWithProxyUrl,
+  signTxWithProxyUrl,
 } from "@intuweb3/sdk";
 import { getRPCNodeFromNetworkId, rebuildTransactionRecordsForAccount } from "./utils";
 import { addTransaction, dbScript, getTransactionsForAccount } from "./database";
@@ -186,7 +190,7 @@ let encryptedSeed = '';
 
       publishUpdateToServer(`SaltRobos: pre-registration:getPreregistrationStatus:start:${signer} => expect success or failure`, {}, responsePayload)
       
-      const preRegisterInfo = await getUserPreRegisterInfos(accountAddress,signer,provider); 
+      const preRegisterInfo =  {registered: false} // await getUserPreRegisterInfos(accountAddress,signer,provider); 
 
       if(preRegisterInfo.registered) { // user is already pre registered, redundant request
         
@@ -226,7 +230,7 @@ let encryptedSeed = '';
     try {
 
       publishUpdateToServer(`SaltRobos: pre-registration:start:${signer} => expect success or failure`, {}, responsePayload)
-      const tx = await preRegistration(accountAddress, signers[signer]) as ethers.ContractTransaction
+      const tx = await preRegistrationWithProxyUrl(accountAddress, signers[signer], process.env.HTTPS_PROXY) as ethers.ContractTransaction
       const res = await tx.wait();
 
       publishUpdateToServer(`SaltRobos: pre-registration:success:${signer} => response`, {res}, responsePayload)
@@ -270,7 +274,7 @@ let encryptedSeed = '';
     try {
 
       publishUpdateToServer(`SaltRobos: register:event:getRegistrationStatus:start:${signer} => expect success or failure`, {}, responsePayload);
-    
+      
       const allInfos = (await getUserRegistrationAllInfos(
         accountAddress,
         provider,
@@ -315,7 +319,7 @@ let encryptedSeed = '';
     try {
       publishUpdateToServer(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
       
-      const res = await automateRegistration(accountAddress, signers[signer], nostrNode, undefined)
+      const res = await automateRegistrationWithProxyUrl(accountAddress, signers[signer], process.env.HTTPS_PROXY,nostrNode, undefined)
       
       publishUpdateToServer(`SaltRobos: register:automateRegistration:success:${signer} => response`, {res}, responsePayload)
 
@@ -340,7 +344,7 @@ let encryptedSeed = '';
 
     try {
       publishUpdateToServer(`SaltRobos: register:registerAllSteps:start:${signer} => expect success or failure`, {}, responsePayload)
-      const tx = await registerAllSteps(accountAddress, signers[signer],undefined, nostrNode, undefined) as ethers.ContractTransaction
+      const tx = await registerAllStepsWithProxyUrl(accountAddress, signers[signer],process.env.HTTPS_PROXY,undefined, nostrNode, undefined) as ethers.ContractTransaction
       const res = await tx.wait()
 
       publishUpdateToServer(`SaltRobos: register:registerAllSteps:success:${signer} => response`, {res}, responsePayload)
@@ -385,7 +389,7 @@ let encryptedSeed = '';
       try {
         publishUpdateToServer(`SaltRobos: proposeTransaction:signTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
-        const tx = await signTx(accountAddress, Number(txId), signers[signer]) as ethers.ContractTransaction
+        const tx = await signTxWithProxyUrl(accountAddress, Number(txId), signers[signer],process.env.HTTPS_PROXY) as ethers.ContractTransaction
         const res = await tx.wait()
 
         publishUpdateToServer(`SaltRobos: proposeTransaction:signTx:success:${signer} => response`, {res}, responsePayload)
