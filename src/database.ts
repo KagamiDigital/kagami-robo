@@ -9,7 +9,14 @@ export const dbScript = () => {
           accountAddress TEXT NOT NULL,
           txId INTEGER NOT NULL,
           chainId TEXT NOT NULL,
-          txHash TEXT
+          txHash TEXT,
+          fromAddress TEXT,
+          toAddress TEXT,
+          status INTEGER,
+          value TEXT,
+          gasPrice TEXT,
+          gasUsed TEXT,
+          timestamp INTEGER
         );`
       
         db.run(create_table_query, (err) => {
@@ -46,12 +53,12 @@ export const dbScript = () => {
     }
 }
 
-export const addTransaction = (accountAddress:string, txId:number, chainId:string, txHash:string) => {
-    const sql = `INSERT INTO transactions (accountAddress, txId, chainId, txHash) VALUES (?, ?, ?, ?)`;
+export const addTransaction = (accountAddress:string, txId:number, chainId:string, txHash:string, fromAddress:string, toAddress:string, status:number, value:string, gasPrice:string, gasUsed:string, timestamp:number) => {
+    const sql = `INSERT INTO transactions (accountAddress, txId, chainId, txHash, fromAddress, toAddress, status, value, gasPrice, gasUsed, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     
     const db = new Database('./transactions.sqlite'); 
 
-    db.run(sql, [accountAddress, txId, chainId, txHash], function(result,err) {
+    db.run(sql, [accountAddress, txId, chainId, txHash, fromAddress, toAddress, status, value, gasPrice, gasUsed, timestamp], function(result,err) {
         if (err) {
             console.error('Error inserting transaction: ' + err.message);
         } else {
