@@ -70,7 +70,6 @@ socket.on("accountTransactions", async (data: {signer:string, accountAddress: st
 
     publishUpdateToServer(`SaltRobos: accountTransactions:start:${signer} => expect success or failure`, {}, {accountAddress, signer})
     
-    console.log('the account address is '+accountAddress); 
     const transactions = await getTransactionsForAccount(accountAddress);  
 
     console.log(transactions);
@@ -78,8 +77,8 @@ socket.on("accountTransactions", async (data: {signer:string, accountAddress: st
     publishUpdateToServer(`SaltRobos: accountTransactions:success:${signer}`,{}, {accountAddress, signer})
     
       socket.emit("accountTransactions", {
-        ...{transactions,accountAddress, signer},
-        success: true,
+        accountAddress:accountAddress,
+        data: transactions,
         error: null,
       });
 
@@ -91,7 +90,8 @@ socket.on("accountTransactions", async (data: {signer:string, accountAddress: st
     logger.error(`Log:Error: Error: getAccountTransactions:failure:${signer}`, error)
 
     socket.emit("accountTransactions", {
-      ...{transctions:[],accountAddress, signer},
+      accountAddress:accountAddress,
+      data: [],
       success: false,
       error,
     });

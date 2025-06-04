@@ -1,5 +1,6 @@
 import fs from 'fs'
 import { Database } from 'sqlite3';
+import { TransactionObject } from './types/Transaction';
 
 export const dbScript = () => {
     if(!fs.existsSync('./transactions.sqlite')) { 
@@ -70,14 +71,13 @@ export const addTransaction = (accountAddress:string, txId:number, chainId:strin
     });
 };
 
-export const getTransactionsForAccount = (accountAddress:string) => {
+export const getTransactionsForAccount = async (accountAddress:string):Promise<TransactionObject[]> => {
     const sql = `SELECT * FROM transactions WHERE accountAddress = ? COLLATE NOCASE`;
 
     const db = new Database('./transactions.sqlite'); 
     
-    return new Promise<any>((resolve,reject) => {
-        db.all(sql, [accountAddress], (err, rows) => {
-            console.log(rows); 
+    return new Promise<TransactionObject[]>((resolve,reject) => {
+        db.all(sql, [accountAddress], (err, rows: TransactionObject[]) => {
             if(err) {
                 reject(err); 
             } else {
