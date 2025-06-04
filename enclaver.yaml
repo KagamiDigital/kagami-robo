@@ -12,6 +12,9 @@ egress:
     - kms.*.amazonaws.com
     - 169.254.169.254
     - robonet.salt.space
-    - arb-sepolia.g.alchemy.com
+      - "*.g.alchemy.com"
+      - "*.*"
+      - "*.*.*"
+      - "*.*.*.*"
 ingress:
   - listen_port: 4300
