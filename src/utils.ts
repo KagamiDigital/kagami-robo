@@ -25,8 +25,13 @@ export async function rebuildTransactionRecordsForAccount(signer: ethers.Signer,
     for(let i = 0; i < transactions.length; i++) {
         try {
             const signedTx = await combineSignedTx(accountAddress,transactions[i].id,signer); 
-            const txHash = ethers.utils.keccak256(signedTx); 
-            addTransaction(accountAddress,Number(transactions[i].id),transactions[i].chainId,txHash); 
+            const txHash = ethers.utils.keccak256(signedTx);
+            
+            const txReceipt = await provider.getTransactionReceipt(txHash); 
+            const tx = await provider.getTransaction(txHash); 
+            const block = await provider.getBlock(txReceipt.blockHash); 
+
+            addTransaction(accountAddress,Number(transactions[i].id),transactions[i].chainId,txHash,txReceipt.from,txReceipt.to,txReceipt.status,tx.value.toString(),txReceipt.effectiveGasPrice.toString(),txReceipt.gasUsed.toString(),block.timestamp); 
         } catch(err) { // not enough signatures to combine, incomplete tx
             console.log(err); 
         }
