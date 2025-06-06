@@ -9,17 +9,19 @@
     "nodev": "node --version",
     "debug": "node dist/bundle.js --debugger"
   },
-  "dependenci es": {
-    "@intuweb3/sdk": "^0.0.45",
+  "dependencies": {
+    "@intuweb3/sdk": "^0.0.44",
     "@types/sqlite3": "^3.1.11",
     "assert-browserify": "^2.0.0",
     "bufferutil": "^4.0.8",
     "crypto-browserify": "^3.12.0",
     "dotenv": "^16.4.5",
+    "esbuild": "^0.20.2",
     "ethers": "^5.7.2",
     "express": "^4.18.3",
     "file-loader": "^6.2.0",
     "https-proxy-agent": "^7.0.6",
+    "jest": "^29.7.0",
     "node": "^22.4.0",
     "os-browserify": "^0.3.0",
     "path-browserify": "^1.0.1",
@@ -30,6 +32,8 @@
     "ts-loader": "^9.5.1",
     "utf-8-validate": "^5.0.10",
     "vm-browserify": "^1.1.2",
+    "webpack": "^5.92.1",
+    "webpack-cli": "^5.1.4",
     "winston": "^3.13.0"
   },
   "devDependencies": {
