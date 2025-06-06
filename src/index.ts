@@ -11,10 +11,10 @@ import {
   combineSignedTx,
   getUserRegistrationAllInfos,
   getUserPreRegisterInfos,
-  preRegistrationWithProxyUrl,
-  automateRegistrationWithProxyUrl,
-  registerAllStepsWithProxyUrl,
-  signTxWithProxyUrl,
+  preRegistrationWithProxy,
+  automateRegistrationWithProxy,
+  registerAllStepsWithProxy,
+  signTxWithProxy,
 } from "@intuweb3/sdk";
 import { getRPCNodeFromNetworkId, rebuildTransactionRecordsForAccount } from "./utils";
 import { addTransaction, dbScript, getTransactionsForAccount } from "./database";
@@ -230,7 +230,7 @@ let encryptedSeed = '';
     try {
 
       publishUpdateToServer(`SaltRobos: pre-registration:start:${signer} => expect success or failure`, {}, responsePayload)
-      const tx = await preRegistrationWithProxyUrl(accountAddress, signers[signer], process.env.HTTPS_PROXY) as ethers.ContractTransaction
+      const tx = await preRegistrationWithProxy(accountAddress, signers[signer], process.env.HTTPS_PROXY) as ethers.ContractTransaction
       const res = await tx.wait();
 
       publishUpdateToServer(`SaltRobos: pre-registration:success:${signer} => response`, {res}, responsePayload)
@@ -319,7 +319,7 @@ let encryptedSeed = '';
     try {
       publishUpdateToServer(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
       
-      const res = await automateRegistrationWithProxyUrl(accountAddress, signers[signer], process.env.HTTPS_PROXY,nostrNode, undefined)
+      const res = await automateRegistrationWithProxy(accountAddress, signers[signer], process.env.HTTPS_PROXY,nostrNode, undefined)
       
       publishUpdateToServer(`SaltRobos: register:automateRegistration:success:${signer} => response`, {res}, responsePayload)
 
@@ -344,7 +344,7 @@ let encryptedSeed = '';
 
     try {
       publishUpdateToServer(`SaltRobos: register:registerAllSteps:start:${signer} => expect success or failure`, {}, responsePayload)
-      const tx = await registerAllStepsWithProxyUrl(accountAddress, signers[signer],process.env.HTTPS_PROXY,undefined, nostrNode, undefined) as ethers.ContractTransaction
+      const tx = await registerAllStepsWithProxy(accountAddress, signers[signer],process.env.HTTPS_PROXY,undefined, nostrNode, undefined) as ethers.ContractTransaction
       const res = await tx.wait()
 
       publishUpdateToServer(`SaltRobos: register:registerAllSteps:success:${signer} => response`, {res}, responsePayload)
@@ -389,7 +389,7 @@ let encryptedSeed = '';
       try {
         publishUpdateToServer(`SaltRobos: proposeTransaction:signTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
-        const tx = await signTxWithProxyUrl(accountAddress, Number(txId), signers[signer],process.env.HTTPS_PROXY) as ethers.ContractTransaction
+        const tx = await signTxWithProxy(accountAddress, Number(txId), signers[signer],process.env.HTTPS_PROXY) as ethers.ContractTransaction
         const res = await tx.wait()
 
         publishUpdateToServer(`SaltRobos: proposeTransaction:signTx:success:${signer} => response`, {res}, responsePayload)
