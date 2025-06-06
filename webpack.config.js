@@ -41,7 +41,7 @@ module.exports = {
     asyncWebAssembly: true,
   },
   externals: {
-    "utf-8-validate": "utf-8-validate",
+    "utf-8-validate": "commonjs utf-8-validate",
     sqlite3: 'commonjs sqlite3',
   },
   plugins: [
