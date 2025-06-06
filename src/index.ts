@@ -18,10 +18,10 @@ import { RoboSignerStatus } from "./types/RoboSignerStatus";
 
 dotenv.config();
 
-const agent = new https_proxy_agent.HttpsProxyAgent(process.env.HTTPS_PROXY); 
+//const agent = new https_proxy_agent.HttpsProxyAgent(process.env.HTTPS_PROXY); 
 
 import { ethers } from "ethers";
-const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true, fetchOptions: {agent: agent}});
+const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true});
 const signers: { [index: string]: ethers.Wallet } = {};
 let encryptedSeed = '';
 
@@ -75,7 +75,7 @@ let encryptedSeed = '';
       encryptedSeed: encryptedSeed,
     },
     transports: ["websocket"],
-    agent: agent
+    //agent: agent
   });
 
   console.log("Attempting socket on ", process.env.API_URL)
