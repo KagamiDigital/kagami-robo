@@ -6,7 +6,8 @@ run-docker:
 	
 build-enclave:
 	PCR0=$$(sudo enclaver build --file enclaver.yaml | grep -o '"PCR0": "[^"]*"' | cut -d'"' -f4) && \
-	sudo sed -i "s|__PCR0__|$$PCR0|g" pcr-policy-stub.json
+	echo "PCR0 value: $$PCR0" && \
+	sudo sed -i -E "s|__PCR0__|$$PCR0|g; s|\"PCR0\": \"[^\"]*\"|\"PCR0\": \"$$PCR0\"|g" pcr-policy-stub.json
 
 update-pcr:
 	TOKEN=$$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600") && \
