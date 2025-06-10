@@ -6,7 +6,7 @@ import { spawn } from 'child_process';
  */
 export function recoverSeed(): Promise<string> {
   return new Promise((resolve, reject) => {
-    const pythonProcess = spawn('python3', ['recover.py']);
+    const pythonProcess = spawn('python3', ['/home/ec2-user/kagami-robo/setup/enclave/recover.py']);
     let output = '';
     let errorOutput = '';
 

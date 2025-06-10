@@ -53,8 +53,6 @@ Resources:
           HttpPutResponseHopLimit: 2 # Increase from 1 to 2 due to docker0 hop
         SecurityGroupIds: 
           - !GetAtt RoboSignerSecurityGroup.GroupId
-        EnclaveOptions:
-          Enabled: true
         BlockDeviceMappings:
         - DeviceName: /dev/xvda  # root device name for Amazon Linux
           Ebs:
@@ -65,31 +63,54 @@ Resources:
           Fn::Base64: 
             !Sub |
               #!/bin/bash
-              sudo dnf install -y git
-              sudo dnf install -y python3-pip
-              curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-              source ~/.bashrc
-              nvm install 22
-              nvm use 22
-              npm install pm2@latest -g 
+
+              # Update system and install basic tools
+              sudo dnf update -y
+              sudo dnf install -y git python3-pip
+
+              # Install Node.js via NodeSource (simpler and works system-wide)
+              curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
+              sudo dnf install -y nodejs
+
+              # Install PM2 globally
+              sudo npm install pm2@latest -g
+
+              # Clone repository
               cd /home/ec2-user
               git clone https://github.com/KagamiDigital/kagami-robo.git
-              cd kagami-robo 
-              git config --global --add safe.directory /kagami-robo
+              cd kagami-robo
+
+              # set ownership of the entire project directory
+              sudo chown -R ec2-user:ec2-user /home/ec2-user/kagami-robo
+
+              # Fix git safe directory
+              git config --global --add safe.directory /home/ec2-user/kagami-robo
               git checkout cloud
+
+              # Python setup
               cd setup/ec2
-              pip3 install --no-cache-dir -r requirements.txt
+              sudo pip3 install --no-cache-dir -r requirements.txt
+              export AWS_DEFAULT_REGION=us-east-1
               python3 bootstrap.py "${PublicKey}"
-              cd ../..
-              sudo mv .env.sample .env
-              sed -i 's/API_KEY="your API key goes here"/API_KEY="'"${ApiKey}"'"/' /home/ec2-user/kagami-robo/.env
+
+              # Environment setup
+              cd /home/ec2-user/kagami-robo
+              cp .env.sample .env  # Use cp instead of sudo mv
+              sed -i 's/API_KEY="your API key goes here"/API_KEY="'"${ApiKey}"'"/' .env
+
+              # Install npm dependencies
               npm install
-              sudo chmod +x build_robo.sh
-              sudo ./build_robo.sh
-              pm2 start pm2.config.js
-              #sudo chmod +x boot.sh
-              #sudo ./boot.sh
-              #sudo reboot
+
+              # Make scripts executable and run
+              chmod +x build_robos.sh
+              ./build_robos.sh
+
+              # Start PM2
+              sudo -u ec2-user pm2 start pm2.config.js
+
+              # Ensure PM2 starts on boot
+              sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ec2-user --hp /home/ec2-user
+              sudo -u ec2-user pm2 save
   RoboSignerInstance:
     Type: 'AWS::EC2::Instance'
     Properties: 
@@ -124,16 +145,16 @@ Resources:
             Action:
               - 'sts:AssumeRole'
       Policies:
-        - PolicyName: "KMSEnclavePermissions"
+        - PolicyName: "RoboSignersPermissions"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Sid: "ec2KmsPermissions"
                 Effect: "Allow"
                 Action:
-                  - 'kms:Encrypt'
-                  - 'kms:CreateKey'
-                  - 'kms:Decrypt'
+                  - kms:Encrypt
+                  - kms:CreateKey
+                  - kms:Decrypt
                 Resource: "*"
               - Sid: "ssmPermissions"
                 Effect: "Allow"
