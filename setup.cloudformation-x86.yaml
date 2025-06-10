@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Enclaver on a single EC2 machine with Nitro Enclaves enabled
+Description: Salt Robo Signers on a single EC2 machine
 Metadata: 
   AWS::CloudFormation::Interface: 
     ParameterGroups: 
@@ -25,8 +25,8 @@ Metadata:
 Parameters:
   InstanceType:
     Type: String
-    Description: Cheapest x86 instance that supports Nitro Enclaves
-    Default: c6a.xlarge
+    Description: Free tier eligible instance
+    Default: t2.micro
     AllowedPattern: ".+"
   LatestAmiId:
     Description: Amazon Linux 2023 x86 AMI for us-east1 Region
@@ -58,44 +58,38 @@ Resources:
         BlockDeviceMappings:
         - DeviceName: /dev/xvda  # root device name for Amazon Linux
           Ebs:
-            VolumeSize: 16       # Specified in GB
+            VolumeSize: 8       # Specified in GB
             VolumeType: gp3
             DeleteOnTermination: true
         UserData:
           Fn::Base64: 
             !Sub |
               #!/bin/bash
-              sudo dnf install aws-nitro-enclaves-cli -y
-              sudo dnf install aws-nitro-enclaves-cli-devel -y
-              usermod -aG ne ec2-user
-              usermod -aG docker ec2-user
-              sudo systemctl start nitro-enclaves-allocator.service && sudo systemctl enable nitro-enclaves-allocator.service
-              sudo systemctl start docker && sudo systemctl enable docker
-              sed -i 's/memory_mib: 512/memory_mib: 4096/g' /etc/nitro_enclaves/allocator.yaml
-              sudo curl --silent --location https://github.com/enclaver-io/enclaver/releases/download/v0.5.0/enclaver-linux-x86_64-v0.5.0.tar.gz --output enclaver.tar.gz
-              sudo tar --extract --verbose --file enclaver.tar.gz
-              sudo install enclaver-linux-$(uname -m)-v*/enclaver /usr/bin
               sudo dnf install -y git
               sudo dnf install -y python3-pip
-              sudo dnf install -y make
+              curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+              source ~/.bashrc
+              nvm install 22
+              nvm use 22
+              npm install pm2@latest -g 
               cd /home/ec2-user
               git clone https://github.com/KagamiDigital/kagami-robo.git
               cd kagami-robo 
               git config --global --add safe.directory /kagami-robo
-              git checkout enclave
+              git checkout cloud
               cd setup/ec2
               pip3 install --no-cache-dir -r requirements.txt
-              export AWS_DEFAULT_REGION=us-east-1
               python3 bootstrap.py "${PublicKey}"
               cd ../..
               sudo mv .env.sample .env
               sed -i 's/API_KEY="your API key goes here"/API_KEY="'"${ApiKey}"'"/' /home/ec2-user/kagami-robo/.env
-              make build-docker
-              make build-enclave
-              make update-pcr
-              sudo chmod +x boot.sh
-              sudo ./boot.sh
-              sudo reboot
+              npm install
+              sudo chmod +x build_robo.sh
+              sudo ./build_robo.sh
+              pm2 start pm2.config.js
+              #sudo chmod +x boot.sh
+              #sudo ./boot.sh
+              #sudo reboot
   RoboSignerInstance:
     Type: 'AWS::EC2::Instance'
     Properties: 
@@ -139,14 +133,23 @@ Resources:
                 Action:
                   - 'kms:Encrypt'
                   - 'kms:CreateKey'
+                  - 'kms:Decrypt'
                 Resource: "*"
-              - Sid: "IAMPolicyManagement"
+              - Sid: "ssmPermissions"
                 Effect: "Allow"
                 Action:
-                  - 'iam:GetRolePolicy'
-                  - 'iam:GetInstanceProfile'
-                  - 'iam:PutRolePolicy'
-                Resource: "*"
+                  - cloudwatch:PutMetricData
+                  - ds:CreateComputer
+                  - ds:DescribeDirectories
+                  - ec2:DescribeInstanceStatus
+                  - logs:*
+                  - ssm:*
+                  - ec2messages:*
+                  - ssmmessages:CreateControlChannel
+                  - ssmmessages:CreateDataChannel
+                  - ssmmessages:OpenControlChannel
+                  - ssmmessages:OpenDataChannel
+                Resource: '*'
   RoboSignerInstanceProfile:
     Type: "AWS::IAM::InstanceProfile"
     Properties:
