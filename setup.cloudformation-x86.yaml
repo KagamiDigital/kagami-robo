@@ -75,6 +75,10 @@ Resources:
               # Install PM2 globally
               sudo npm install pm2@latest -g
 
+              # Ensure PM2 starts on boot
+              sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ec2-user --hp /home/ec2-user
+              sudo -u ec2-user pm2 save
+
               # Clone repository
               cd /home/ec2-user
               git clone https://github.com/KagamiDigital/kagami-robo.git
@@ -102,13 +106,9 @@ Resources:
               # Make scripts executable and run
               chmod +x build_robos.sh
               sudo ./build_robos.sh
-
+            
               # Start PM2
               sudo -u ec2-user pm2 start pm2.config.js
-
-              # Ensure PM2 starts on boot
-              sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ec2-user --hp /home/ec2-user
-              sudo -u ec2-user pm2 save
   RoboSignerInstance:
     Type: 'AWS::EC2::Instance'
     Properties: 

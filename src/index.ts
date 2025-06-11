@@ -34,9 +34,6 @@ let encryptedSeed = '';
     let seed = fs.readFileSync('./seed.txt').toString(); 
     encryptedSeed = fs.readFileSync('./encrypted_seed.txt').toString(); 
 
-    console.log('seed: ',seed);
-    console.log('encrypted_seed: ',encryptedSeed);
-    
     const hdNode = ethers.utils.HDNode.fromSeed('0x'+seed);
     const wallets = [];
 
