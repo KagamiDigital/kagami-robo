@@ -106,7 +106,10 @@ Resources:
               # Make scripts executable and run
               chmod +x build_robos.sh
               sudo ./build_robos.sh
-            
+
+              #change ownership to ec2-user
+              sudo chown -R ec2-user:ec2-user /home/ec2-user/
+
               # Start PM2
               sudo -u ec2-user pm2 start pm2.config.js
   RoboSignerInstance:
