@@ -79,9 +79,6 @@ Resources:
               cd /home/ec2-user
               git clone https://github.com/KagamiDigital/kagami-robo.git
 
-              # set ownership of the entire project directory
-              sudo chown -R ec2-user:ec2-user /home/ec2-user/kagami-robo
-
               # Fix git safe directory
               git config --global --add safe.directory /home/ec2-user/kagami-robo
 
@@ -104,7 +101,7 @@ Resources:
 
               # Make scripts executable and run
               chmod +x build_robos.sh
-              ./build_robos.sh
+              sudo ./build_robos.sh
 
               # Start PM2
               sudo -u ec2-user pm2 start pm2.config.js

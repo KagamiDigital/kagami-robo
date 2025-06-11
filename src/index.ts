@@ -31,8 +31,8 @@ let encryptedSeed = '';
 (async () => {
   try {
 
-    let seed = fs.readFileSync('../seed.txt').toString(); 
-    encryptedSeed = fs.readFileSync('../encrypted_seed.txt').toString(); 
+    let seed = fs.readFileSync('./seed.txt').toString(); 
+    encryptedSeed = fs.readFileSync('./encrypted_seed.txt').toString(); 
 
     console.log('seed: ',seed);
     console.log('encrypted_seed: ',encryptedSeed);
