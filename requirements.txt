@@ -1,4 +1,3 @@
-boto3==1.37.16
 mnemonic
 eth-keys 
 eciespy

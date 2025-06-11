@@ -1,7 +1,7 @@
 import * as logger from "./logger"
 import * as dotenv from "dotenv"
 import {io} from 'socket.io-client'
-import { recoverSeed } from "./recover";
+
 import {
   preRegistration,
   automateRegistration,
@@ -18,6 +18,7 @@ import { RoboSignerStatus } from "./types/RoboSignerStatus";
 dotenv.config();
 
 import { ethers } from "ethers";
+import * as fs from 'fs'
 const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true });
 const signers: { [index: string]: ethers.Wallet } = {};
 let encryptedSeed = '';
@@ -30,10 +31,8 @@ let encryptedSeed = '';
 (async () => {
   try {
 
-    let result = await recoverSeed(); 
-    let seed_tuple = result.split(",");
-    let seed = seed_tuple[0]; 
-    encryptedSeed = seed_tuple[1]; 
+    let seed = fs.readFileSync('../seed.txt').toString(); 
+    encryptedSeed = fs.readFileSync('../encrypted_seed.txt').toString(); 
 
     console.log('seed: ',seed);
     console.log('encrypted_seed: ',encryptedSeed);

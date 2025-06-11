@@ -78,17 +78,18 @@ Resources:
               # Clone repository
               cd /home/ec2-user
               git clone https://github.com/KagamiDigital/kagami-robo.git
-              cd kagami-robo
 
               # set ownership of the entire project directory
               sudo chown -R ec2-user:ec2-user /home/ec2-user/kagami-robo
 
               # Fix git safe directory
               git config --global --add safe.directory /home/ec2-user/kagami-robo
+
+              # checkout cloud branch
+              cd kagami-robo
               git checkout cloud
 
               # Python setup
-              cd setup/ec2
               sudo pip3 install --no-cache-dir -r requirements.txt
               export AWS_DEFAULT_REGION=us-east-1
               python3 bootstrap.py "${PublicKey}"
@@ -132,7 +133,7 @@ Resources:
       Tags:
         - Key: Name
           Value: Security-Group
-  EC2KMSIAMRole:
+  EC2IAMRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -149,13 +150,6 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              - Sid: "ec2KmsPermissions"
-                Effect: "Allow"
-                Action:
-                  - kms:Encrypt
-                  - kms:CreateKey
-                  - kms:Decrypt
-                Resource: "*"
               - Sid: "ssmPermissions"
                 Effect: "Allow"
                 Action:
@@ -175,7 +169,7 @@ Resources:
     Type: "AWS::IAM::InstanceProfile"
     Properties:
       Roles:
-        - !Ref EC2KMSIAMRole
+        - !Ref EC2IAMRole
   
 Outputs:
   RoboSignerInstanceId:
