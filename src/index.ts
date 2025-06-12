@@ -11,8 +11,8 @@ import {
   registerAllStepsWithProxy,
   signTxWithProxy,
   getVaultsWithProxy,
-  createProxiedProvider,
-  parseProxyUrl
+  parseProxyUrl,
+  createProxiedSigner
 } from "@intuweb3/sdk";
 import { getRPCNodeFromNetworkId } from "./utils";
 import { addTransaction, dbScript, getTransactionsForAccount } from "./database";
@@ -26,9 +26,14 @@ import Web3 from "web3";
 import * as HDKey from 'hdkey'; 
 import { Account, TransactionReceipt } from "web3-core";
 
+interface ProxiedSigner {
+  web3: Web3; 
+  account:Account; 
+}
+
 let provider:Web3;
 
-const signers: { [index: string]:Account } = {};
+const signers: { [index: string]:ProxiedSigner } = {};
 let encryptedSeed = '';
 
 ( async () => {
@@ -45,22 +50,18 @@ let encryptedSeed = '';
     let seed = seed_tuple[0]
     encryptedSeed = seed_tuple[1]; 
 
-    
     // Create HD wallet
     var hdWallet = HDKey.fromMasterSeed(Buffer.from(seed, 'hex'));
-
-    console.log('creating proxiedProvider'); 
-    provider = await createProxiedProvider(process.env.ORCHESTRATION_NODE_URL, parseProxyUrl(process.env.HTTPS_PROXY));
-        
+    
     // Generate accounts
     for (let i = 0; i < 3 ; i++) {
         const path = `m/44'/60'/0'/0/${i}`;
         const wallet = hdWallet.derive(path);
         const privateKey = '0x' + wallet.privateKey.toString('hex');
-        const account = provider.eth.accounts.privateKeyToAccount(privateKey);
-        signers[account.address] = account;
-        console.log(`Signer ${i + 1}`, account.address);
-        logger.info(`Signer ${i + 1}`, account.address)
+        const proxiedSigner:ProxiedSigner = await createProxiedSigner(privateKey,parseProxyUrl(process.env.HTTPS_PROXY),process.env.ORCHESTRATION_NODE_URL)
+        signers[proxiedSigner.account.address] = proxiedSigner;
+        console.log(`Signer ${i + 1}`, proxiedSigner.account.address);
+        logger.info(`Signer ${i + 1}`, proxiedSigner.account.address)
     }
 
   } catch (error) {
@@ -225,7 +226,7 @@ let encryptedSeed = '';
     try {
 
       publishUpdateToServer(`SaltRobos: pre-registration:start:${signer} => expect success or failure`, {}, responsePayload)
-      const receipt:TransactionReceipt = await preRegistrationWithProxy(accountAddress, {web3: provider, account: signers[signer]}, process.env.HTTPS_PROXY) 
+      const receipt:TransactionReceipt = await preRegistrationWithProxy(accountAddress, signers[signer], process.env.HTTPS_PROXY) 
       console.log(receipt);
       publishUpdateToServer(`SaltRobos: pre-registration:success:${signer} => response`, {receipt}, responsePayload)
 
@@ -269,7 +270,7 @@ let encryptedSeed = '';
 
       publishUpdateToServer(`SaltRobos: register:event:getRegistrationStatus:start:${signer} => expect success or failure`, {}, responsePayload);
       
-      const vaults = await getVaultsWithProxy(signer,provider,process.env.HTTPS_PROXY,{web3: provider, account: signers[signer]});
+      const vaults = await getVaultsWithProxy(signer,provider,process.env.HTTPS_PROXY,signers[signer]);
    
 
       const users = vaults.find(v => v.vaultAddress.toLowerCase() === accountAddress.toLocaleLowerCase())?.users;
@@ -312,7 +313,7 @@ let encryptedSeed = '';
     try {
       publishUpdateToServer(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
       
-      const res = await automateRegistrationWithProxy(accountAddress, {web3: provider, account: signers[signer]}, process.env.HTTPS_PROXY,nostrNode, undefined)
+      const res = await automateRegistrationWithProxy(accountAddress, signers[signer], process.env.HTTPS_PROXY,nostrNode, undefined)
       
       publishUpdateToServer(`SaltRobos: register:automateRegistration:success:${signer} => response`, {res}, responsePayload)
 
@@ -337,7 +338,7 @@ let encryptedSeed = '';
 
     try {
       publishUpdateToServer(`SaltRobos: register:registerAllSteps:start:${signer} => expect success or failure`, {}, responsePayload)
-      const receipt = await registerAllStepsWithProxy(accountAddress, {web3: provider, account: signers[signer]},process.env.HTTPS_PROXY,undefined, nostrNode, undefined); 
+      const receipt = await registerAllStepsWithProxy(accountAddress, signers[signer],process.env.HTTPS_PROXY,undefined, nostrNode, undefined); 
       console.log(receipt);
       publishUpdateToServer(`SaltRobos: register:registerAllSteps:success:${signer} => response`, {receipt}, responsePayload)
     } catch(error) {
