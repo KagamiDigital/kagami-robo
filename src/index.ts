@@ -58,7 +58,8 @@ let encryptedSeed = '';
         const path = `m/44'/60'/0'/0/${i}`;
         const wallet = hdWallet.derive(path);
         const privateKey = '0x' + wallet.privateKey.toString('hex');
-        const proxiedSigner:ProxiedSigner = await createProxiedSigner(privateKey,parseProxyUrl(process.env.HTTPS_PROXY),process.env.ORCHESTRATION_NODE_URL)
+        const proxiedSigner:ProxiedSigner = await createProxiedSigner(privateKey,process.env.HTTPS_PROXY,process.env.ORCHESTRATION_NODE_URL)
+        console.log(proxiedSigner);
         signers[proxiedSigner.account.address] = proxiedSigner;
         console.log(`Signer ${i + 1}`, proxiedSigner.account.address);
         logger.info(`Signer ${i + 1}`, proxiedSigner.account.address)
