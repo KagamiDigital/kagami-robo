@@ -107,7 +107,7 @@ Resources:
               chmod +x build_robos.sh
               sudo ./build_robos.sh
 
-              #change ownership to ec2-user
+              # Change ownership to ec2-user
               sudo chown -R ec2-user:ec2-user /home/ec2-user/
 
               # Start PM2
