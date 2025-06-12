@@ -11,7 +11,6 @@ import {
   registerAllStepsWithProxy,
   signTxWithProxy,
   getVaultsWithProxy,
-  parseProxyUrl,
   createProxiedSigner
 } from "@intuweb3/sdk";
 import { getRPCNodeFromNetworkId } from "./utils";
@@ -58,11 +57,10 @@ let encryptedSeed = '';
         const path = `m/44'/60'/0'/0/${i}`;
         const wallet = hdWallet.derive(path);
         const privateKey = '0x' + wallet.privateKey.toString('hex');
-        const proxiedSigner:ProxiedSigner = await createProxiedSigner(privateKey,process.env.HTTPS_PROXY,process.env.ORCHESTRATION_NODE_URL)
-        console.log(proxiedSigner);
-        signers[proxiedSigner.account.address] = proxiedSigner;
-        console.log(`Signer ${i + 1}`, proxiedSigner.account.address);
-        logger.info(`Signer ${i + 1}`, proxiedSigner.account.address)
+        const {web3, account} = await createProxiedSigner(privateKey,process.env.HTTPS_PROXY,process.env.ORCHESTRATION_NODE_URL);
+        signers[account.address] = {web3, account};
+        console.log(`Signer ${i + 1}`, account.account.address);
+        logger.info(`Signer ${i + 1}`, account.account.address)
     }
 
   } catch (error) {
@@ -227,7 +225,8 @@ let encryptedSeed = '';
     try {
 
       publishUpdateToServer(`SaltRobos: pre-registration:start:${signer} => expect success or failure`, {}, responsePayload)
-      const receipt:TransactionReceipt = await preRegistrationWithProxy(accountAddress, signers[signer], process.env.HTTPS_PROXY) 
+      console.log({web3: signers[signer].web3, account: signers[signer].account})
+      const receipt:TransactionReceipt = await preRegistrationWithProxy(accountAddress, {web3: signers[signer].web3, account: signers[signer].account}, process.env.HTTPS_PROXY) 
       console.log(receipt);
       publishUpdateToServer(`SaltRobos: pre-registration:success:${signer} => response`, {receipt}, responsePayload)
 
