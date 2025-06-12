@@ -44,10 +44,10 @@ Parameters:
     NoEcho: true
     AllowedPattern: "^[0-9a-fA-F]{130}$"
 Resources:
-  RoboSignerLaunchTemplate: 
+  RoboSignerEnclaveLaunchTemplate: 
     Type: AWS::EC2::LaunchTemplate
     Properties:
-      LaunchTemplateName: RoboSignerLaunchTemplate
+      LaunchTemplateName: RoboSignerEnclaveLaunchTemplate
       LaunchTemplateData:
         MetadataOptions:
           HttpPutResponseHopLimit: 2 # Increase from 1 to 2 due to docker0 hop
@@ -102,8 +102,8 @@ Resources:
       ImageId: !Ref LatestAmiId
       InstanceType: !Ref InstanceType
       LaunchTemplate: 
-        LaunchTemplateId: !Ref RoboSignerLaunchTemplate
-        Version: !GetAtt RoboSignerLaunchTemplate.LatestVersionNumber
+        LaunchTemplateId: !Ref RoboSignerEnclaveLaunchTemplate
+        Version: !GetAtt RoboSignerEnclaveLaunchTemplate.LatestVersionNumber
       IamInstanceProfile: !Ref RoboSignerInstanceProfile
   RoboSignerSecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
