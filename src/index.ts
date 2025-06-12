@@ -11,6 +11,8 @@ import {
   registerAllStepsWithProxy,
   signTxWithProxy,
   getVaultsWithProxy,
+  createProxiedProvider,
+  parseProxyUrl
 } from "@intuweb3/sdk";
 import { getRPCNodeFromNetworkId } from "./utils";
 import { addTransaction, dbScript, getTransactionsForAccount } from "./database";
@@ -23,9 +25,9 @@ const agent = new https_proxy_agent.HttpsProxyAgent(process.env.HTTPS_PROXY);
 import Web3 from "web3";
 import * as HDKey from 'hdkey'; 
 import { Account, TransactionReceipt } from "web3-core";
- 
-const provider = new Web3(new Web3.providers.HttpProvider(process.env.ORCHESTRATION_NODE_URL, {agent: { https: agent, http: agent }}));
-provider.eth.accounts.wallet
+
+let provider:Web3;
+
 const signers: { [index: string]:Account } = {};
 let encryptedSeed = '';
 
@@ -45,7 +47,10 @@ let encryptedSeed = '';
 
     
     // Create HD wallet
-    var hdWallet = HDKey.fromMasterSeed(Buffer.from(seed, 'hex'))
+    var hdWallet = HDKey.fromMasterSeed(Buffer.from(seed, 'hex'));
+
+    console.log('creating proxiedProvider'); 
+    provider = await createProxiedProvider(process.env.ORCHESTRATION_NODE_URL, parseProxyUrl(process.env.HTTPS_PROXY));
         
     // Generate accounts
     for (let i = 0; i < 3 ; i++) {
