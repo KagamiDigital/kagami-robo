@@ -59,8 +59,8 @@ let encryptedSeed = '';
         const privateKey = '0x' + wallet.privateKey.toString('hex');
         const {web3, account} = await createProxiedSigner(privateKey,process.env.HTTPS_PROXY,process.env.ORCHESTRATION_NODE_URL);
         signers[account.address] = {web3, account};
-        console.log(`Signer ${i + 1}`, account.account.address);
-        logger.info(`Signer ${i + 1}`, account.account.address)
+        console.log(`Signer ${i + 1}`, account.address);
+        logger.info(`Signer ${i + 1}`, account.address)
     }
 
   } catch (error) {
