@@ -1,6 +1,8 @@
 import { combineSignedTx, getAllTransactions } from "@intuweb3/sdk";
-import { ethers } from "ethers";
+//import { ethers } from "ethers";
 import { addTransaction } from "./database";
+import Web3 from "web3";
+import {Account} from 'web3-core'
 
 export function getRPCNodeFromNetworkId(networkId:string) {
     if(networkId === '11155111') {
@@ -19,8 +21,8 @@ export function getRPCNodeFromNetworkId(networkId:string) {
         return ''; 
     }
 }
-
-export async function rebuildTransactionRecordsForAccount(signer: ethers.Signer, provider:ethers.providers.JsonRpcProvider,accountAddress:string) {
+/*
+export async function rebuildTransactionRecordsForAccount(signer: Account, provider:Web3,accountAddress:string) {
     const transactions = await getAllTransactions(accountAddress,provider);
     for(let i = 0; i < transactions.length; i++) {
         try {
@@ -31,4 +33,4 @@ export async function rebuildTransactionRecordsForAccount(signer: ethers.Signer,
             console.log(err); 
         }
     }
-}
+}*/

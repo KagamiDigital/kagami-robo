@@ -3,20 +3,16 @@ import * as dotenv from "dotenv"
 import {io} from 'socket.io-client'
 const https_proxy_agent = require("https-proxy-agent");
 import { recoverSeed } from "./recover";
+
 import {
-  preRegistration,
-  automateRegistration,
-  registerAllSteps,
-  signTx,
   combineSignedTx,
-  getUserRegistrationAllInfos,
-  getUserPreRegisterInfos,
   preRegistrationWithProxy,
   automateRegistrationWithProxy,
   registerAllStepsWithProxy,
   signTxWithProxy,
+  getVaultsWithProxy,
 } from "@intuweb3/sdk";
-import { getRPCNodeFromNetworkId, rebuildTransactionRecordsForAccount } from "./utils";
+import { getRPCNodeFromNetworkId } from "./utils";
 import { addTransaction, dbScript, getTransactionsForAccount } from "./database";
 import { RoboSignerStatus } from "./types/RoboSignerStatus";
 
@@ -24,50 +20,44 @@ dotenv.config();
 
 const agent = new https_proxy_agent.HttpsProxyAgent(process.env.HTTPS_PROXY); 
 
-import { ethers } from "ethers";
-const provider = new ethers.providers.StaticJsonRpcProvider({url: process.env.ORCHESTRATION_NODE_URL || "",skipFetchSetup:true, fetchOptions: {agent: agent}});
-const signers: { [index: string]: ethers.Wallet } = {};
+import Web3 from "web3";
+import * as HDKey from 'hdkey'; 
+import { Account, TransactionReceipt } from "web3-core";
+ 
+const provider = new Web3(new Web3.providers.HttpProvider(process.env.ORCHESTRATION_NODE_URL, {agent: { https: agent, http: agent }}));
+provider.eth.accounts.wallet
+const signers: { [index: string]:Account } = {};
 let encryptedSeed = '';
 
 ( async () => {
   console.log('running db script'); 
   dbScript();
-})(); 
+})();
+
 
 (async () => {
   try {
 
     let result = await recoverSeed(); 
     let seed_tuple = result.split(",");
-    let seed = seed_tuple[0]; 
+    let seed = seed_tuple[0]
     encryptedSeed = seed_tuple[1]; 
 
-    console.log('seed: ',seed);
-    console.log('encrypted_seed: ',encryptedSeed);
     
-    const hdNode = ethers.utils.HDNode.fromSeed('0x'+seed);
-    const wallets = [];
-
-    for (let i = 0; i < 3; i++) {
-      const path = `m/44'/60'/0'/0/${i}`;
-      
-      const wallet = hdNode.derivePath(path);
-      wallets.push({
-        index: i,
-        path: path,
-        address: wallet.address,
-        privateKey: wallet.privateKey
-      });
+    // Create HD wallet
+    var hdWallet = HDKey.fromMasterSeed(Buffer.from(seed, 'hex'))
+        
+    // Generate accounts
+    for (let i = 0; i < 3 ; i++) {
+        const path = `m/44'/60'/0'/0/${i}`;
+        const wallet = hdWallet.derive(path);
+        const privateKey = '0x' + wallet.privateKey.toString('hex');
+        const account = provider.eth.accounts.privateKeyToAccount(privateKey);
+        signers[account.address] = account;
+        console.log(`Signer ${i + 1}`, account.address);
+        logger.info(`Signer ${i + 1}`, account.address)
     }
 
-    for(let i = 0; i < wallets.length ; i ++) {
-      const wallet = new ethers.Wallet(wallets[i].privateKey);
-      const signer = wallet.connect(provider);
-      const publicAddress = await signer.getAddress();
-      signers[publicAddress] = signer;
-      console.log(`Signer ${i + 1}`, publicAddress);
-      logger.info(`Signer ${i + 1}`, publicAddress)
-    }
   } catch (error) {
     console.error('Error recovering seed:', error);
   }
@@ -137,7 +127,7 @@ let encryptedSeed = '';
       return; 
     }
   });
-
+  /*
   socket.on("accountTransactionsHistoryBuild", async (data: {signer:string, accountAddress: string }) => {
 
     const { accountAddress, signer } = data;
@@ -176,7 +166,7 @@ let encryptedSeed = '';
 
       return; 
     }
-  });
+  }); */
     
   socket.on("preRegister", async (data: { signer: string; accountAddress: string }) => {
 
@@ -230,10 +220,9 @@ let encryptedSeed = '';
     try {
 
       publishUpdateToServer(`SaltRobos: pre-registration:start:${signer} => expect success or failure`, {}, responsePayload)
-      const tx = await preRegistrationWithProxy(accountAddress, signers[signer], process.env.HTTPS_PROXY) as ethers.ContractTransaction
-      const res = await tx.wait();
-
-      publishUpdateToServer(`SaltRobos: pre-registration:success:${signer} => response`, {res}, responsePayload)
+      const receipt:TransactionReceipt = await preRegistrationWithProxy(accountAddress, {web3: provider, account: signers[signer]}, process.env.HTTPS_PROXY) 
+      console.log(receipt);
+      publishUpdateToServer(`SaltRobos: pre-registration:success:${signer} => response`, {receipt}, responsePayload)
 
       const status:RoboSignerStatus = {
         accountAddress: accountAddress,
@@ -275,16 +264,15 @@ let encryptedSeed = '';
 
       publishUpdateToServer(`SaltRobos: register:event:getRegistrationStatus:start:${signer} => expect success or failure`, {}, responsePayload);
       
-      const allInfos = (await getUserRegistrationAllInfos(
-        accountAddress,
-        provider,
-      )); 
+      const vaults = await getVaultsWithProxy(signer,provider,process.env.HTTPS_PROXY,{web3: provider, account: signers[signer]});
+   
 
-      const userInfos = allInfos.find(el => el !== null && (el.user.toLowerCase() === signer.toLowerCase()));
+      const users = vaults.find(v => v.vaultAddress.toLowerCase() === accountAddress.toLocaleLowerCase())?.users;
+      const user = users.find(u => u.address.toLowerCase() === signer.toLowerCase()); 
 
-      if(userInfos && userInfos.registered) { // robo has already registerd, redundant request
+      if(user && user.isRegistered) { // robo has already registerd, redundant request
         
-        publishUpdateToServer(`SaltRobos: register:event:getRegistrationStatus:success:${signer}`, userInfos.registered, responsePayload);
+        publishUpdateToServer(`SaltRobos: register:event:getRegistrationStatus:success:${signer}`, user.isRegistered, responsePayload);
     
         const status:RoboSignerStatus = {
           accountAddress: accountAddress,
@@ -319,7 +307,7 @@ let encryptedSeed = '';
     try {
       publishUpdateToServer(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
       
-      const res = await automateRegistrationWithProxy(accountAddress, signers[signer], process.env.HTTPS_PROXY,nostrNode, undefined)
+      const res = await automateRegistrationWithProxy(accountAddress, {web3: provider, account: signers[signer]}, process.env.HTTPS_PROXY,nostrNode, undefined)
       
       publishUpdateToServer(`SaltRobos: register:automateRegistration:success:${signer} => response`, {res}, responsePayload)
 
@@ -344,10 +332,9 @@ let encryptedSeed = '';
 
     try {
       publishUpdateToServer(`SaltRobos: register:registerAllSteps:start:${signer} => expect success or failure`, {}, responsePayload)
-      const tx = await registerAllStepsWithProxy(accountAddress, signers[signer],process.env.HTTPS_PROXY,undefined, nostrNode, undefined) as ethers.ContractTransaction
-      const res = await tx.wait()
-
-      publishUpdateToServer(`SaltRobos: register:registerAllSteps:success:${signer} => response`, {res}, responsePayload)
+      const receipt = await registerAllStepsWithProxy(accountAddress, {web3: provider, account: signers[signer]},process.env.HTTPS_PROXY,undefined, nostrNode, undefined); 
+      console.log(receipt);
+      publishUpdateToServer(`SaltRobos: register:registerAllSteps:success:${signer} => response`, {receipt}, responsePayload)
     } catch(error) {
       publishUpdateToServer(`SaltRobos:Error: register:registerAllSteps:failure:${signer} => error`, {error}, responsePayload)
 
@@ -389,10 +376,9 @@ let encryptedSeed = '';
       try {
         publishUpdateToServer(`SaltRobos: proposeTransaction:signTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
-        const tx = await signTxWithProxy(accountAddress, Number(txId), signers[signer],process.env.HTTPS_PROXY) as ethers.ContractTransaction
-        const res = await tx.wait()
-
-        publishUpdateToServer(`SaltRobos: proposeTransaction:signTx:success:${signer} => response`, {res}, responsePayload)
+        const receipt = await signTxWithProxy(accountAddress, Number(txId), {web3: provider, account: signers[signer]},process.env.HTTPS_PROXY); 
+        console.log(receipt);
+        publishUpdateToServer(`SaltRobos: proposeTransaction:signTx:success:${signer} => response`, {receipt}, responsePayload)
 
         socket.emit("transactionSigningComplete", {
           ...responsePayload,
@@ -447,7 +433,7 @@ let encryptedSeed = '';
       try {
         publishUpdateToServer(`SaltRobos: broadcastTransaction:combineTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
-        combineResponse = await combineSignedTx(accountAddress, Number(txId), signers[signer]);
+        combineResponse = await combineSignedTx(accountAddress, Number(txId), signers[signer] as any);
         publishUpdateToServer(`SaltRobos: broadcastTransaction:combineTx:success:${signer} => response`, {combineResponse}, responsePayload)
 
         socket.emit("transactionCombiningComplete", {
@@ -472,11 +458,9 @@ let encryptedSeed = '';
 
         publishUpdateToServer(`SaltRobos: broadcastTransaction:sendTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
-        const _provider = new ethers.providers.StaticJsonRpcProvider({url: RPC_NODE_URL || "",skipFetchSetup:true});
+        const _provider = new Web3(new Web3.providers.HttpProvider(RPC_NODE_URL, {agent: { https: agent, http: agent }}));
 
-        const txResponse = await _provider.sendTransaction(combineResponse); 
-
-        const txReceipt= await txResponse.wait(); 
+        const txReceipt:TransactionReceipt = await _provider.eth.sendSignedTransaction(combineResponse); 
 
         responsePayload.txReceipt = txReceipt;
 
