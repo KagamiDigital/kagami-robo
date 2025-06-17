@@ -19,7 +19,7 @@ import { RoboSignerStatus } from "./types/RoboSignerStatus";
 
 dotenv.config();
 
-const proxyUrl = process.env.HTTPS_PROXY; 
+const proxyUrl = process.env.http_proxy; 
 const agent = new https_proxy_agent.HttpsProxyAgent(proxyUrl); 
 
 import Web3 from "web3";
@@ -55,8 +55,8 @@ let encryptedSeed = '';
     
     console.log('HTTPS_PROXY:',process.env.HTTPS_PROXY)
     console.log('HTTP_PROXY:',process.env.HTTP_PROXY);
-    console.log('httpsProxy:',process.env.httpsProxy);
-    console.log('httpProxy:',process.env.httpProxy);
+    console.log('httpsProxy:',process.env.https_proxy);
+    console.log('httpProxy:',process.env.http_proxy);
     console.log('rpcUrl', process.env.ORCHESTRATION_NODE_URL)
 
     // Generate accounts
