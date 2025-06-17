@@ -19,6 +19,7 @@ import { RoboSignerStatus } from "./types/RoboSignerStatus";
 
 dotenv.config();
 
+const proxyUrl = process.env.HTTP_PROXY; 
 const agent = new https_proxy_agent.HttpsProxyAgent(process.env.HTTPS_PROXY); 
 
 import Web3 from "web3";
@@ -57,10 +58,10 @@ let encryptedSeed = '';
         const path = `m/44'/60'/0'/0/${i}`;
         const wallet = hdWallet.derive(path);
         const privateKey = '0x' + wallet.privateKey.toString('hex');
-        const {web3, account} = await createProxiedSigner(privateKey,process.env.HTTPS_PROXY,process.env.ORCHESTRATION_NODE_URL);
-        signers[account.address] = {web3, account};
-        console.log(`Signer ${i + 1}`, account.address);
-        logger.info(`Signer ${i + 1}`, account.address)
+        const proxiedSigner:ProxiedSigner = await createProxiedSigner(privateKey,proxyUrl,process.env.ORCHESTRATION_NODE_URL);
+        signers[proxiedSigner.account.address] = proxiedSigner;
+        console.log(`Signer ${i + 1}`, proxiedSigner.account.address);
+        logger.info(`Signer ${i + 1}`, proxiedSigner.account.address)
     }
 
   } catch (error) {
@@ -225,8 +226,7 @@ let encryptedSeed = '';
     try {
 
       publishUpdateToServer(`SaltRobos: pre-registration:start:${signer} => expect success or failure`, {}, responsePayload)
-      console.log({web3: signers[signer].web3, account: signers[signer].account})
-      const receipt:TransactionReceipt = await preRegistrationWithProxy(accountAddress, {web3: signers[signer].web3, account: signers[signer].account}, process.env.HTTPS_PROXY) 
+      const receipt:TransactionReceipt = await preRegistrationWithProxy(accountAddress, signers[signer], proxyUrl) 
       console.log(receipt);
       publishUpdateToServer(`SaltRobos: pre-registration:success:${signer} => response`, {receipt}, responsePayload)
 
@@ -270,7 +270,7 @@ let encryptedSeed = '';
 
       publishUpdateToServer(`SaltRobos: register:event:getRegistrationStatus:start:${signer} => expect success or failure`, {}, responsePayload);
       
-      const vaults = await getVaultsWithProxy(signer,provider,process.env.HTTPS_PROXY,signers[signer]);
+      const vaults = await getVaultsWithProxy(signer,provider,proxyUrl,signers[signer]);
    
 
       const users = vaults.find(v => v.vaultAddress.toLowerCase() === accountAddress.toLocaleLowerCase())?.users;
@@ -313,7 +313,7 @@ let encryptedSeed = '';
     try {
       publishUpdateToServer(`SaltRobos: register:automateRegistration:start:${signer} => expect success or failure`, {}, responsePayload)
       
-      const res = await automateRegistrationWithProxy(accountAddress, signers[signer], process.env.HTTPS_PROXY,nostrNode, undefined)
+      const res = await automateRegistrationWithProxy(accountAddress, signers[signer], proxyUrl,nostrNode, undefined)
       
       publishUpdateToServer(`SaltRobos: register:automateRegistration:success:${signer} => response`, {res}, responsePayload)
 
@@ -338,7 +338,7 @@ let encryptedSeed = '';
 
     try {
       publishUpdateToServer(`SaltRobos: register:registerAllSteps:start:${signer} => expect success or failure`, {}, responsePayload)
-      const receipt = await registerAllStepsWithProxy(accountAddress, signers[signer],process.env.HTTPS_PROXY,undefined, nostrNode, undefined); 
+      const receipt = await registerAllStepsWithProxy(accountAddress, signers[signer],proxyUrl,undefined, nostrNode, undefined); 
       console.log(receipt);
       publishUpdateToServer(`SaltRobos: register:registerAllSteps:success:${signer} => response`, {receipt}, responsePayload)
     } catch(error) {
@@ -382,7 +382,7 @@ let encryptedSeed = '';
       try {
         publishUpdateToServer(`SaltRobos: proposeTransaction:signTx:start:${signer} => expect success or failure`, {}, responsePayload)
 
-        const receipt = await signTxWithProxy(accountAddress, Number(txId), {web3: provider, account: signers[signer]},process.env.HTTPS_PROXY); 
+        const receipt = await signTxWithProxy(accountAddress, Number(txId), {web3: provider, account: signers[signer]},proxyUrl); 
         console.log(receipt);
         publishUpdateToServer(`SaltRobos: proposeTransaction:signTx:success:${signer} => response`, {receipt}, responsePayload)
 
