@@ -183,6 +183,8 @@ async function main() {
         logger.info(`Signer ${i + 1}`, proxiedSigner.account.address)
     }
 
+    main();
+
   } catch (error) {
     console.error('Error recovering seed:', error);
   }
