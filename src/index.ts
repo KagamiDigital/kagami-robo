@@ -11,7 +11,8 @@ import {
   registerAllStepsWithProxy,
   signTxWithProxy,
   getVaultsWithProxy,
-  createProxiedSigner
+  createProxiedSigner,
+  preRegistration
 } from "@intuweb3/sdk";
 import { getRPCNodeFromNetworkId } from "./utils";
 import { addTransaction, dbScript, getTransactionsForAccount } from "./database";
@@ -25,6 +26,7 @@ const agent = new https_proxy_agent.HttpsProxyAgent(proxyUrl);
 import Web3 from "web3";
 import * as HDKey from 'hdkey'; 
 import { Account, TransactionReceipt } from "web3-core";
+import { ethers } from "ethers";
 
 interface ProxiedSigner {
   web3: Web3; 
@@ -40,6 +42,117 @@ let encryptedSeed = '';
   console.log('running db script'); 
   dbScript();
 })();
+
+async function main() {
+  try {
+    console.log("Starting enclave application...");
+
+    const httpProxy = process.env.http_proxy || process.env.HTTP_PROXY;
+    const httpsProxy = process.env.https_proxy || process.env.HTTPS_PROXY;
+
+    console.log("Environment check:");
+    console.log("- http_proxy:", httpProxy || "not set");
+    console.log("- https_proxy:", httpsProxy || "not set");
+
+    const vaultAddress = "0xeadb66d5ae87b7ae0f9985fe09c6abab601988f9";
+    console.log("Using vault address:", vaultAddress);
+
+    const privateKey =
+      "bd8e712fc0101504598acc2bf743b2baaea173ab8e49bef62088a6514fa085c3";
+
+    const rpcUrl =
+      "https://arbitrum-sepolia.infura.io/v3/f0b33e4b953e4306b6d5e8b9f9d51567";
+    console.log("Using RPC URL:", rpcUrl);
+
+    console.log("Attempting direct connection for blockchain RPC...");
+    try {
+      const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+      const signer = new ethers.Wallet(privateKey, provider);
+
+      console.log("Testing direct RPC connection...");
+      const network = await provider.getNetwork();
+      console.log(
+        "✅ Direct connection successful! Network:",
+        network.name,
+        "Chain ID:",
+        network.chainId
+      );
+
+      console.log("Starting pre-registration without proxy...");
+      const result = await preRegistration(vaultAddress, signer);
+      console.log("✅ PreRegistration Result (direct):", result);
+      return;
+    } catch (directError: any) {
+      console.log("❌ Direct connection failed:", directError.message);
+      console.log("Trying with proxy...");
+    }
+
+    // Fallback to proxy if direct fails
+    // Use HTTP proxy first (for blockchain calls), then KMS proxy as last resort
+    let proxyUrl = "";
+
+    console.log("🔍 Proxy selection logic:");
+    console.log("  - httpsProxy:", httpsProxy);
+    console.log("  - httpProxy:", httpProxy);
+
+    if (httpsProxy && httpsProxy.includes("10000")) {
+      proxyUrl = httpsProxy;
+      console.log(
+        "🌐 Selected HTTPS_PROXY (port 10000) for blockchain calls:",
+        proxyUrl
+      );
+    } else if (httpProxy && httpProxy.includes("10000")) {
+      proxyUrl = httpProxy;
+      console.log(
+        "🌐 Selected HTTP_PROXY (port 10000) for blockchain calls:",
+        proxyUrl
+      );
+    } else if (httpsProxy) {
+      proxyUrl = httpsProxy;
+      console.log("🌐 Selected HTTPS_PROXY (any port):", proxyUrl);
+    } else if (httpProxy) {
+      proxyUrl = httpProxy;
+      console.log("🌐 Selected HTTP_PROXY (any port):", proxyUrl);
+    } else {
+      console.log("❌ No proxy available");
+    }
+
+    if (proxyUrl) {
+      try {
+        console.log("Creating proxied signer with:", proxyUrl);
+        const proxiedSigner = await createProxiedSigner(
+          privateKey,
+          proxyUrl,
+          rpcUrl
+        );
+        console.log("✅ Proxied signer created successfully");
+
+        console.log("Starting pre-registration with proxy...");
+        const result = await preRegistrationWithProxy(
+          vaultAddress,
+          proxiedSigner,
+          proxyUrl
+        );
+
+        console.log("✅ PreRegistration Result (proxy):", result);
+        return;
+      } catch (proxyError: any) {
+        console.log("❌ Proxy connection failed:", proxyError.message);
+      }
+    }
+
+    throw new Error("All connection methods failed.");
+  } catch (error) {
+    console.error("Error in enclave test:", error);
+    if (error instanceof Error) {
+      console.error("Error details:", {
+        message: error.message,
+        stack: error.stack,
+      });
+    }
+    process.exit(1);
+  }
+}
 
 
 (async () => {
