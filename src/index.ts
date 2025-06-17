@@ -19,8 +19,8 @@ import { RoboSignerStatus } from "./types/RoboSignerStatus";
 
 dotenv.config();
 
-const proxyUrl = process.env.HTTP_PROXY; 
-const agent = new https_proxy_agent.HttpsProxyAgent(process.env.HTTPS_PROXY); 
+const proxyUrl = process.env.HTTPS_PROXY; 
+const agent = new https_proxy_agent.HttpsProxyAgent(proxyUrl); 
 
 import Web3 from "web3";
 import * as HDKey from 'hdkey'; 
@@ -53,6 +53,12 @@ let encryptedSeed = '';
     // Create HD wallet
     var hdWallet = HDKey.fromMasterSeed(Buffer.from(seed, 'hex'));
     
+    console.log('HTTPS_PROXY:',process.env.HTTPS_PROXY)
+    console.log('HTTP_PROXY:',process.env.HTTP_PROXY);
+    console.log('httpsProxy:',process.env.httpsProxy);
+    console.log('httpProxy:',process.env.httpProxy);
+    console.log('rpcUrl', process.env.ORCHESTRATION_NODE_URL)
+
     // Generate accounts
     for (let i = 0; i < 3 ; i++) {
         const path = `m/44'/60'/0'/0/${i}`;
@@ -226,6 +232,8 @@ let encryptedSeed = '';
     try {
 
       publishUpdateToServer(`SaltRobos: pre-registration:start:${signer} => expect success or failure`, {}, responsePayload)
+      
+      console.log(signers[signer]);
       const receipt:TransactionReceipt = await preRegistrationWithProxy(accountAddress, signers[signer], proxyUrl) 
       console.log(receipt);
       publishUpdateToServer(`SaltRobos: pre-registration:success:${signer} => response`, {receipt}, responsePayload)
