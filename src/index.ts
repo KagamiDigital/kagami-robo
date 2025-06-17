@@ -54,7 +54,7 @@ async function main() {
     console.log("- http_proxy:", httpProxy || "not set");
     console.log("- https_proxy:", httpsProxy || "not set");
 
-    const vaultAddress = "0xeadb66d5ae87b7ae0f9985fe09c6abab601988f9";
+    const vaultAddress = "0x15EF6A1789736B3A5519AA6e220f299EFA5F4788";
     console.log("Using vault address:", vaultAddress);
 
     const privateKey =
